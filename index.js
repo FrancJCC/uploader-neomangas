@@ -116,7 +116,7 @@ const httpsAgent = new https.Agent({
 });
 
 async function uploadImages(imagePaths, seriesTitle, chapterNumber) {
-    const BATCH_SIZE = 10; // Subir 10 imágenes por petición para velocidad máxima
+    const BATCH_SIZE = 5; // Reducido de 10 a 5 para evitar sobrecarga
     const allUrls = new Array(imagePaths.length);
     let completed = 0;
 
@@ -181,8 +181,8 @@ async function uploadImages(imagePaths, seriesTitle, chapterNumber) {
     for (let i = 0; i < imagePaths.length; i += BATCH_SIZE) {
         const batch = imagePaths.slice(i, i + BATCH_SIZE);
         await uploadBatch(batch, i);
-        // Small pause to be gentle
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // Aumentar pausa entre lotes para dar respiro al backend
+        await new Promise(resolve => setTimeout(resolve, 500));
     }
     
     console.log(''); // New line
