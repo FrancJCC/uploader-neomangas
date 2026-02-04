@@ -4,24 +4,24 @@
 // para mantener las claves seguras y poder cambiarlas fácilmente.
 
 const DEFAULT_CONFIG = {
-  // Configuración PRIMARY (Nuevo Bucket - NeoMangas2)
-  PRIMARY: {
-    ACCESS_KEY_ID: '003f8dffc92c15b0000000001',
-    SECRET_ACCESS_KEY: 'K003dGuOHI0UEnhHQh0HUMMbmDuVb0M',
-    BUCKET_NAME: 'NeoMangas2',
-    REGION: 'eu-central-003',
-    ENDPOINT: 's3.eu-central-003.backblazeb2.com'
-  },
-  // Configuración SECONDARY (Viejo Bucket - NeoMangas)
-  SECONDARY: {
+  // Configuración BUCKET VIEJO (Prioridad 1 - NeoMangas)
+  OLD: {
     ACCESS_KEY_ID: '003d6365952f9010000000001',
     SECRET_ACCESS_KEY: 'K003prqFINgITot+qLtSEBcAT2pXiOQ',
     BUCKET_NAME: 'NeoMangas',
     REGION: 'eu-central-003',
     ENDPOINT: 's3.eu-central-003.backblazeb2.com'
   },
-  // Configuración TERTIARY (Tercer Bucket - El más antiguo/nuevo)
-  TERTIARY: {
+  // Configuración BUCKET INTERMEDIO (Prioridad 2 - NeoMangas2)
+  INTERMEDIATE: {
+    ACCESS_KEY_ID: '003f8dffc92c15b0000000001',
+    SECRET_ACCESS_KEY: 'K003dGuOHI0UEnhHQh0HUMMbmDuVb0M',
+    BUCKET_NAME: 'NeoMangas2',
+    REGION: 'eu-central-003',
+    ENDPOINT: 's3.eu-central-003.backblazeb2.com'
+  },
+  // Configuración BUCKET NUEVO (Prioridad 3 - Tercer Bucket)
+  NEW: {
     ACCESS_KEY_ID: '', // Configurar en Cloudflare ENV
     SECRET_ACCESS_KEY: '',
     BUCKET_NAME: '',
@@ -60,81 +60,74 @@ export default {
 
     // --- 2. Preparar configuraciones desde ENV o defaults ---
     
-    // PRIMARY CONFIG
-    const primaryConfig = {
-      accessKeyId: env.PRIMARY_ACCESS_KEY_ID || DEFAULT_CONFIG.PRIMARY.ACCESS_KEY_ID,
-      secretAccessKey: env.PRIMARY_SECRET_ACCESS_KEY || DEFAULT_CONFIG.PRIMARY.SECRET_ACCESS_KEY,
-      bucketName: env.PRIMARY_BUCKET_NAME || DEFAULT_CONFIG.PRIMARY.BUCKET_NAME,
-      region: env.PRIMARY_REGION || DEFAULT_CONFIG.PRIMARY.REGION,
-      endpoint: env.PRIMARY_ENDPOINT || DEFAULT_CONFIG.PRIMARY.ENDPOINT
+    // OLD CONFIG (Viejo)
+    const oldConfig = {
+      accessKeyId: env.OLD_ACCESS_KEY_ID || DEFAULT_CONFIG.OLD.ACCESS_KEY_ID,
+      secretAccessKey: env.OLD_SECRET_ACCESS_KEY || DEFAULT_CONFIG.OLD.SECRET_ACCESS_KEY,
+      bucketName: env.OLD_BUCKET_NAME || DEFAULT_CONFIG.OLD.BUCKET_NAME,
+      region: env.OLD_REGION || DEFAULT_CONFIG.OLD.REGION,
+      endpoint: env.OLD_ENDPOINT || DEFAULT_CONFIG.OLD.ENDPOINT
     };
 
-    // SECONDARY CONFIG
-    const secondaryConfig = {
-      accessKeyId: env.SECONDARY_ACCESS_KEY_ID || DEFAULT_CONFIG.SECONDARY.ACCESS_KEY_ID,
-      secretAccessKey: env.SECONDARY_SECRET_ACCESS_KEY || DEFAULT_CONFIG.SECONDARY.SECRET_ACCESS_KEY,
-      bucketName: env.SECONDARY_BUCKET_NAME || DEFAULT_CONFIG.SECONDARY.BUCKET_NAME,
-      region: env.SECONDARY_REGION || DEFAULT_CONFIG.SECONDARY.REGION,
-      endpoint: env.SECONDARY_ENDPOINT || DEFAULT_CONFIG.SECONDARY.ENDPOINT
+    // INTERMEDIATE CONFIG (Intermedio)
+    const intermediateConfig = {
+      accessKeyId: env.INTERMEDIATE_ACCESS_KEY_ID || DEFAULT_CONFIG.INTERMEDIATE.ACCESS_KEY_ID,
+      secretAccessKey: env.INTERMEDIATE_SECRET_ACCESS_KEY || DEFAULT_CONFIG.INTERMEDIATE.SECRET_ACCESS_KEY,
+      bucketName: env.INTERMEDIATE_BUCKET_NAME || DEFAULT_CONFIG.INTERMEDIATE.BUCKET_NAME,
+      region: env.INTERMEDIATE_REGION || DEFAULT_CONFIG.INTERMEDIATE.REGION,
+      endpoint: env.INTERMEDIATE_ENDPOINT || DEFAULT_CONFIG.INTERMEDIATE.ENDPOINT
     };
 
-    // TERTIARY CONFIG
-    const tertiaryConfig = {
-      accessKeyId: env.TERTIARY_ACCESS_KEY_ID || DEFAULT_CONFIG.TERTIARY.ACCESS_KEY_ID,
-      secretAccessKey: env.TERTIARY_SECRET_ACCESS_KEY || DEFAULT_CONFIG.TERTIARY.SECRET_ACCESS_KEY,
-      bucketName: env.TERTIARY_BUCKET_NAME || DEFAULT_CONFIG.TERTIARY.BUCKET_NAME,
-      region: env.TERTIARY_REGION || DEFAULT_CONFIG.TERTIARY.REGION,
-      endpoint: env.TERTIARY_ENDPOINT || DEFAULT_CONFIG.TERTIARY.ENDPOINT
+    // NEW CONFIG (Nuevo)
+    const newConfig = {
+      accessKeyId: env.NEW_ACCESS_KEY_ID || DEFAULT_CONFIG.NEW.ACCESS_KEY_ID,
+      secretAccessKey: env.NEW_SECRET_ACCESS_KEY || DEFAULT_CONFIG.NEW.SECRET_ACCESS_KEY,
+      bucketName: env.NEW_BUCKET_NAME || DEFAULT_CONFIG.NEW.BUCKET_NAME,
+      region: env.NEW_REGION || DEFAULT_CONFIG.NEW.REGION,
+      endpoint: env.NEW_ENDPOINT || DEFAULT_CONFIG.NEW.ENDPOINT
     };
 
-    // --- 3. INTENTO 1: Buscar en SECONDARY (Viejo - Prioridad 1) ---
-    // Según instrucciones: Primero (Old), Luego (New), Luego (Tertiary)
+    // --- 3. INTENTO 1: Buscar en VIEJO (Prioridad 1) ---
     let response;
     
-    // Si tenemos config secundaria válida, buscamos ahí primero
-    if (secondaryConfig.bucketName && secondaryConfig.accessKeyId) {
-       response = await fetchFromBucket(key, secondaryConfig);
+    if (oldConfig.bucketName && oldConfig.accessKeyId) {
+       response = await fetchFromBucket(key, oldConfig);
        
        if (response.status === 200 || response.status === 304) {
           const newHeaders = new Headers(response.headers);
-          newHeaders.set('X-Source-Bucket', 'Secondary');
+          newHeaders.set('X-Source-Bucket', 'Old');
           return wrapResponse(response, newHeaders, key);
        }
     }
 
-    // --- 4. INTENTO 2: Si no está en el viejo, Buscar en PRIMARY (Nuevo - Prioridad 2) ---
-    // Si la respuesta anterior fue undefined (no config) o 404, probamos el primario
+    // --- 4. INTENTO 2: Buscar en INTERMEDIO (Prioridad 2) ---
     if (!response || response.status === 404) {
-        const primaryResponse = await fetchFromBucket(key, primaryConfig);
+        const intermediateResponse = await fetchFromBucket(key, intermediateConfig);
         
-        if (primaryResponse.status === 200 || primaryResponse.status === 304) {
-           const newHeaders = new Headers(primaryResponse.headers);
-           newHeaders.set('X-Source-Bucket', 'Primary');
-           return wrapResponse(primaryResponse, newHeaders, key);
+        if (intermediateResponse.status === 200 || intermediateResponse.status === 304) {
+           const newHeaders = new Headers(intermediateResponse.headers);
+           newHeaders.set('X-Source-Bucket', 'Intermediate');
+           return wrapResponse(intermediateResponse, newHeaders, key);
         }
-        // Actualizamos la respuesta actual
-        response = primaryResponse;
+        response = intermediateResponse;
     }
 
-    // --- 5. INTENTO 3: Si no está en los anteriores, Buscar en TERTIARY (Prioridad 3) ---
-    if ((!response || response.status === 404) && tertiaryConfig.bucketName && tertiaryConfig.accessKeyId) {
-        const tertiaryResponse = await fetchFromBucket(key, tertiaryConfig);
+    // --- 5. INTENTO 3: Buscar en NUEVO (Prioridad 3) ---
+    if ((!response || response.status === 404) && newConfig.bucketName && newConfig.accessKeyId) {
+        const newResponse = await fetchFromBucket(key, newConfig);
         
-        if (tertiaryResponse.status === 200 || tertiaryResponse.status === 304) {
-           const newHeaders = new Headers(tertiaryResponse.headers);
-           newHeaders.set('X-Source-Bucket', 'Tertiary');
-           return wrapResponse(tertiaryResponse, newHeaders, key);
+        if (newResponse.status === 200 || newResponse.status === 304) {
+           const newHeaders = new Headers(newResponse.headers);
+           newHeaders.set('X-Source-Bucket', 'New');
+           return wrapResponse(newResponse, newHeaders, key);
         }
-        // Si falla aquí, esta será la respuesta final
-        response = tertiaryResponse;
+        response = newResponse;
      }
 
-    // Si response sigue siendo undefined (ninguna config válida), devolvemos 404 genérico
     if (!response) {
         return new Response('Not Found', { status: 404 });
     }
 
-    // Si llegamos aquí, devolvemos la respuesta final (probablemente 404)
     return wrapResponse(response, new Headers(response.headers), key);
   },
 };
@@ -201,7 +194,6 @@ async function fetchFromBucket(key, config) {
         });
         return response;
     } catch (error) {
-        // En caso de error de red, devolvemos un objeto similar a response para manejarlo arriba
         return new Response(error.message, { status: 500 });
     }
 }
@@ -216,7 +208,6 @@ function wrapResponse(response, headers, key) {
         const mimeTypes = { 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'webp': 'image/webp', 'gif': 'image/gif' };
         if (mimeTypes[ext]) headers.set('Content-Type', mimeTypes[ext]);
     } else {
-        // Para errores, aseguramos texto plano
         headers.set('Content-Type', 'text/plain; charset=utf-8');
     }
 
