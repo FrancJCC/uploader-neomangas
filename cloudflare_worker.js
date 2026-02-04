@@ -4,7 +4,7 @@
 // para mantener las claves seguras y poder cambiarlas fácilmente.
 
 const DEFAULT_CONFIG = {
-  // Configuración PRIMARY (Nuevo Bucket - NeoMangas2)
+  // Configuración PRIMARY (Corresponde al Bucket INTERMEDIO - NeoMangas2)
   PRIMARY: {
     ACCESS_KEY_ID: '003f8dffc92c15b0000000001',
     SECRET_ACCESS_KEY: 'K003dGuOHI0UEnhHQh0HUMMbmDuVb0M',
@@ -12,7 +12,7 @@ const DEFAULT_CONFIG = {
     REGION: 'eu-central-003',
     ENDPOINT: 's3.eu-central-003.backblazeb2.com'
   },
-  // Configuración SECONDARY (Viejo Bucket - NeoMangas)
+  // Configuración SECONDARY (Corresponde al Bucket VIEJO - NeoMangas)
   SECONDARY: {
     ACCESS_KEY_ID: '003d6365952f9010000000001',
     SECRET_ACCESS_KEY: 'K003prqFINgITot+qLtSEBcAT2pXiOQ',
@@ -20,7 +20,7 @@ const DEFAULT_CONFIG = {
     REGION: 'eu-central-003',
     ENDPOINT: 's3.eu-central-003.backblazeb2.com'
   },
-  // Configuración TERTIARY (Tercer Bucket - El más antiguo/nuevo)
+  // Configuración TERTIARY (Corresponde al Bucket NUEVO)
   TERTIARY: {
     ACCESS_KEY_ID: '', // Configurar en Cloudflare ENV
     SECRET_ACCESS_KEY: '',
@@ -60,17 +60,8 @@ export default {
 
     // --- 2. Preparar configuraciones desde ENV o defaults ---
     
-    // PRIMARY CONFIG
-    const primaryConfig = {
-      accessKeyId: env.PRIMARY_ACCESS_KEY_ID || DEFAULT_CONFIG.PRIMARY.ACCESS_KEY_ID,
-      secretAccessKey: env.PRIMARY_SECRET_ACCESS_KEY || DEFAULT_CONFIG.PRIMARY.SECRET_ACCESS_KEY,
-      bucketName: env.PRIMARY_BUCKET_NAME || DEFAULT_CONFIG.PRIMARY.BUCKET_NAME,
-      region: env.PRIMARY_REGION || DEFAULT_CONFIG.PRIMARY.REGION,
-      endpoint: env.PRIMARY_ENDPOINT || DEFAULT_CONFIG.PRIMARY.ENDPOINT
-    };
-
-    // SECONDARY CONFIG
-    const secondaryConfig = {
+    // OLD CONFIG (Mapeado a SECONDARY/NeoMangas)
+    const oldConfig = {
       accessKeyId: env.SECONDARY_ACCESS_KEY_ID || DEFAULT_CONFIG.SECONDARY.ACCESS_KEY_ID,
       secretAccessKey: env.SECONDARY_SECRET_ACCESS_KEY || DEFAULT_CONFIG.SECONDARY.SECRET_ACCESS_KEY,
       bucketName: env.SECONDARY_BUCKET_NAME || DEFAULT_CONFIG.SECONDARY.BUCKET_NAME,
@@ -78,8 +69,17 @@ export default {
       endpoint: env.SECONDARY_ENDPOINT || DEFAULT_CONFIG.SECONDARY.ENDPOINT
     };
 
-    // TERTIARY CONFIG
-    const tertiaryConfig = {
+    // INTERMEDIATE CONFIG (Mapeado a PRIMARY/NeoMangas2)
+    const intermediateConfig = {
+      accessKeyId: env.PRIMARY_ACCESS_KEY_ID || DEFAULT_CONFIG.PRIMARY.ACCESS_KEY_ID,
+      secretAccessKey: env.PRIMARY_SECRET_ACCESS_KEY || DEFAULT_CONFIG.PRIMARY.SECRET_ACCESS_KEY,
+      bucketName: env.PRIMARY_BUCKET_NAME || DEFAULT_CONFIG.PRIMARY.BUCKET_NAME,
+      region: env.PRIMARY_REGION || DEFAULT_CONFIG.PRIMARY.REGION,
+      endpoint: env.PRIMARY_ENDPOINT || DEFAULT_CONFIG.PRIMARY.ENDPOINT
+    };
+
+    // NEW CONFIG (Mapeado a TERTIARY)
+    const newConfig = {
       accessKeyId: env.TERTIARY_ACCESS_KEY_ID || DEFAULT_CONFIG.TERTIARY.ACCESS_KEY_ID,
       secretAccessKey: env.TERTIARY_SECRET_ACCESS_KEY || DEFAULT_CONFIG.TERTIARY.SECRET_ACCESS_KEY,
       bucketName: env.TERTIARY_BUCKET_NAME || DEFAULT_CONFIG.TERTIARY.BUCKET_NAME,
@@ -87,42 +87,41 @@ export default {
       endpoint: env.TERTIARY_ENDPOINT || DEFAULT_CONFIG.TERTIARY.ENDPOINT
     };
 
-    // --- 3. INTENTO 1: Buscar en SECONDARY (Viejo - Prioridad 1) ---
-    // Según instrucciones: Primero (Old), Luego (New/Intermediate), Luego (Tertiary)
+    // --- 3. INTENTO 1: Buscar en OLD BUCKET (Secondary/NeoMangas) ---
     let response;
     
-    if (secondaryConfig.bucketName && secondaryConfig.accessKeyId) {
-       response = await fetchFromBucket(key, secondaryConfig);
+    if (oldConfig.bucketName && oldConfig.accessKeyId) {
+       response = await fetchFromBucket(key, oldConfig);
        
        if (response.status === 200 || response.status === 304) {
           const newHeaders = new Headers(response.headers);
-          newHeaders.set('X-Source-Bucket', 'Secondary');
+          newHeaders.set('X-Source-Bucket', 'Old');
           return wrapResponse(response, newHeaders, key);
        }
     }
 
-    // --- 4. INTENTO 2: Buscar en PRIMARY (Nuevo/Intermediate - Prioridad 2) ---
+    // --- 4. INTENTO 2: Buscar en INTERMEDIATE BUCKET (Primary/NeoMangas2) ---
     if (!response || response.status === 404) {
-        const primaryResponse = await fetchFromBucket(key, primaryConfig);
+        const intermediateResponse = await fetchFromBucket(key, intermediateConfig);
         
-        if (primaryResponse.status === 200 || primaryResponse.status === 304) {
-           const newHeaders = new Headers(primaryResponse.headers);
-           newHeaders.set('X-Source-Bucket', 'Primary');
-           return wrapResponse(primaryResponse, newHeaders, key);
+        if (intermediateResponse.status === 200 || intermediateResponse.status === 304) {
+           const newHeaders = new Headers(intermediateResponse.headers);
+           newHeaders.set('X-Source-Bucket', 'Intermediate');
+           return wrapResponse(intermediateResponse, newHeaders, key);
         }
-        response = primaryResponse;
+        response = intermediateResponse;
     }
 
-    // --- 5. INTENTO 3: Buscar en TERTIARY (Prioridad 3) ---
-    if ((!response || response.status === 404) && tertiaryConfig.bucketName && tertiaryConfig.accessKeyId) {
-        const tertiaryResponse = await fetchFromBucket(key, tertiaryConfig);
+    // --- 5. INTENTO 3: Buscar en NEW BUCKET (Tertiary) ---
+    if ((!response || response.status === 404) && newConfig.bucketName && newConfig.accessKeyId) {
+        const newResponse = await fetchFromBucket(key, newConfig);
         
-        if (tertiaryResponse.status === 200 || tertiaryResponse.status === 304) {
-           const newHeaders = new Headers(tertiaryResponse.headers);
-           newHeaders.set('X-Source-Bucket', 'Tertiary');
-           return wrapResponse(tertiaryResponse, newHeaders, key);
+        if (newResponse.status === 200 || newResponse.status === 304) {
+           const newHeaders = new Headers(newResponse.headers);
+           newHeaders.set('X-Source-Bucket', 'New');
+           return wrapResponse(newResponse, newHeaders, key);
         }
-        response = tertiaryResponse;
+        response = newResponse;
      }
 
     // Si response sigue siendo undefined (ninguna config válida), devolvemos 404 genérico
@@ -130,7 +129,6 @@ export default {
         return new Response('Not Found', { status: 404 });
     }
 
-    // Si llegamos aquí, devolvemos la respuesta final (probablemente 404)
     return wrapResponse(response, new Headers(response.headers), key);
   },
 };
@@ -197,78 +195,65 @@ async function fetchFromBucket(key, config) {
         });
         return response;
     } catch (error) {
-        // En caso de error de red, devolvemos un objeto similar a response para manejarlo arriba
-        return new Response(error.message, { status: 500 });
+        return new Response(null, { status: 404 });
     }
 }
 
-// --- HELPER: Wrap response with common headers ---
 function wrapResponse(response, headers, key) {
-    headers.set('Access-Control-Allow-Origin', '*');
-    headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+    // Copiar headers
+    const newHeaders = new Headers(headers);
+    newHeaders.set('Access-Control-Allow-Origin', '*');
+    newHeaders.set('Cache-Control', 'public, max-age=31536000');
     
-    if (response.status === 200) {
-        const ext = key.split('.').pop().toLowerCase();
-        const mimeTypes = { 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'webp': 'image/webp', 'gif': 'image/gif' };
-        if (mimeTypes[ext]) headers.set('Content-Type', mimeTypes[ext]);
-    } else {
-        // Para errores, aseguramos texto plano
-        headers.set('Content-Type', 'text/plain; charset=utf-8');
+    // Si es imagen, asegurar Content-Type correcto
+    if (!newHeaders.has('Content-Type')) {
+        if (key.endsWith('.webp')) newHeaders.set('Content-Type', 'image/webp');
+        else if (key.endsWith('.jpg') || key.endsWith('.jpeg')) newHeaders.set('Content-Type', 'image/jpeg');
+        else if (key.endsWith('.png')) newHeaders.set('Content-Type', 'image/png');
     }
 
     return new Response(response.body, {
-      status: response.status,
-      headers: headers
+        status: response.status,
+        statusText: response.statusText,
+        headers: newHeaders
     });
 }
 
-// --- Criptografía (Reutilizada del original) ---
-
+// --- CRYPTO HELPERS ---
 async function sha256Hex(message) {
-  const msgBuffer = new TextEncoder().encode(message);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-  return bufferToHex(hashBuffer);
+    const msgBuffer = new TextEncoder().encode(message);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+    return bufferToHex(hashBuffer);
 }
 
 async function hmacHex(key, message) {
-  let cryptoKey = key;
-  if (!(key instanceof CryptoKey)) {
-      cryptoKey = await crypto.subtle.importKey(
+    const msgBuffer = new TextEncoder().encode(message);
+    const signature = await crypto.subtle.sign('HMAC', key, msgBuffer);
+    return bufferToHex(signature);
+}
+
+async function getSignatureKey(key, dateStamp, regionName, serviceName) {
+    const kDate = await hmacRaw(new TextEncoder().encode("AWS4" + key), dateStamp);
+    const kRegion = await hmacRaw(kDate, regionName);
+    const kService = await hmacRaw(kRegion, serviceName);
+    const kSigning = await hmacRaw(kService, "aws4_request");
+    return kSigning;
+}
+
+async function hmacRaw(key, message) {
+    const msgBuffer = typeof message === 'string' ? new TextEncoder().encode(message) : message;
+    const cryptoKey = await crypto.subtle.importKey(
         'raw', 
         key, 
         { name: 'HMAC', hash: 'SHA-256' }, 
         false, 
         ['sign']
-      );
-  }
-  const msgBuffer = new TextEncoder().encode(message);
-  const signatureBuffer = await crypto.subtle.sign('HMAC', cryptoKey, msgBuffer);
-  return bufferToHex(signatureBuffer);
-}
-
-async function getSignatureKey(key, dateStamp, regionName, serviceName) {
-  const kSecret = new TextEncoder().encode("AWS4" + key);
-  const kDate = await signRaw(kSecret, dateStamp);
-  const kRegion = await signRaw(kDate, regionName);
-  const kService = await signRaw(kRegion, serviceName);
-  const kSigning = await signRaw(kService, "aws4_request");
-  return kSigning;
-}
-
-async function signRaw(key, data) {
-    let cryptoKey = key;
-    if (key instanceof ArrayBuffer || key instanceof Uint8Array) {
-        cryptoKey = await crypto.subtle.importKey(
-            'raw', 
-            key, 
-            { name: 'HMAC', hash: 'SHA-256' }, 
-            false, 
-            ['sign']
-        );
-    }
-    return await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(data));
+    );
+    return await crypto.subtle.sign('HMAC', cryptoKey, msgBuffer);
 }
 
 function bufferToHex(buffer) {
-  return [...new Uint8Array(buffer)].map(b => b.toString(16).padStart(2, '0')).join('');
+    return Array.from(new Uint8Array(buffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
 }
