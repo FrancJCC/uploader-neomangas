@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.511.0",
-    "axios": "^1.6.0",
+    "axios": "^0.27.2",
     "colors": "^1.4.0",
     "dotenv": "^16.3.1",
     "form-data": "^4.0.0",
