@@ -4,15 +4,62 @@ const path = require('path');
 const axios = require('axios');
 const FormData = require('form-data');
 const colors = require('colors');
+const inquirer = require('inquirer');
 
-const API_URL = process.env.API_URL || 'http://localhost:3000';
-const EMAIL = process.env.ADMIN_EMAIL;
-const PASSWORD = process.env.ADMIN_PASSWORD;
-const CONTENT_DIR = process.env.CONTENT_DIR;
+// Variables globales de configuración
+let API_URL = process.env.API_URL || 'http://localhost:3000';
+let EMAIL = process.env.ADMIN_EMAIL;
+let PASSWORD = process.env.ADMIN_PASSWORD;
+let CONTENT_DIR = process.env.CONTENT_DIR;
 
-if (!EMAIL || !PASSWORD || !CONTENT_DIR) {
-    console.error('❌ Error: Por favor configura el archivo .env con ADMIN_EMAIL, ADMIN_PASSWORD y CONTENT_DIR'.red);
-    process.exit(1);
+async function getConfig() {
+    // Si ya tenemos todo por variables de entorno, procedemos
+    if (EMAIL && PASSWORD && CONTENT_DIR) {
+        return;
+    }
+
+    console.log('\n📝 Configuración Interactiva (No se detectaron variables de entorno completas)'.cyan.bold);
+    
+    const answers = await inquirer.prompt([
+        {
+            type: 'input',
+            name: 'API_URL',
+            message: 'URL del Backend:',
+            default: API_URL
+        },
+        {
+            type: 'input',
+            name: 'ADMIN_EMAIL',
+            message: 'Email de Administrador:',
+            default: EMAIL,
+            validate: input => input ? true : 'El email es requerido'
+        },
+        {
+            type: 'password',
+            name: 'ADMIN_PASSWORD',
+            message: 'Contraseña:',
+            mask: '*',
+            validate: input => input ? true : 'La contraseña es requerida'
+        },
+        {
+            type: 'input',
+            name: 'CONTENT_DIR',
+            message: 'Directorio de Mangas (Carpeta donde están las series):',
+            default: CONTENT_DIR || 'E:\\NeoManga\\downloader\\downloads',
+            validate: async (input) => {
+                if (!input) return 'El directorio es requerido';
+                // Opcional: validar si existe, pero tal vez el usuario quiera crearlo o corregirlo después
+                return true;
+            }
+        }
+    ]);
+
+    API_URL = answers.API_URL;
+    EMAIL = answers.ADMIN_EMAIL;
+    PASSWORD = answers.ADMIN_PASSWORD;
+    CONTENT_DIR = answers.CONTENT_DIR;
+    
+    console.log('✅ Configuración cargada correctamente.\n'.green);
 }
 
 let authToken = null;
@@ -203,6 +250,7 @@ const naturalSort = (a, b) => {
 };
 
 async function main() {
+    await getConfig();
     await login();
 
     if (!fs.existsSync(CONTENT_DIR)) {
