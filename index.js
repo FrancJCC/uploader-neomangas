@@ -74,12 +74,13 @@ async function login() {
         authToken = response.data.accessToken;
         const user = response.data.user || {}; 
         const userRoles = user.roles || [];
-        const isAdmin = userRoles.includes('admin');
+        // Permitir admin, owner o editor
+        const hasPermission = userRoles.some(role => ['admin', 'owner', 'editor'].includes(role));
         
         console.log(`✅ Login exitoso. Roles: ${userRoles.join(', ')}`.green);
         
-        if (!isAdmin) {
-             console.warn('⚠️ ADVERTENCIA: Este usuario no parece ser ADMIN. Es posible que no pueda crear capítulos.'.red.bold);
+        if (!hasPermission) {
+             console.warn('⚠️ ADVERTENCIA: Este usuario no tiene permisos suficientes (Owner, Admin o Editor). Es probable que falle la subida.'.red.bold);
         }
     } catch (error) {
         console.error('❌ Error en login:'.red, error.response?.data || error.message);
@@ -115,7 +116,7 @@ const httpsAgent = new https.Agent({
     keepAliveMsecs: 10000 
 });
 
-async function uploadImages(imagePaths, seriesTitle, chapterNumber) {
+async function uploadImages(imagePaths, seriesTitle, chapterNumber, mangaId) {
     const BATCH_SIZE = 5; // Reducido de 10 a 5 para evitar sobrecarga
     const allUrls = new Array(imagePaths.length);
     let completed = 0;
@@ -125,8 +126,13 @@ async function uploadImages(imagePaths, seriesTitle, chapterNumber) {
         const formData = new FormData();
         
         // Add metadata FIRST
-        if (seriesTitle && chapterNumber) {
+        if (mangaId) {
+            formData.append('mangaId', mangaId);
+        }
+        if (seriesTitle) {
             formData.append('seriesTitle', seriesTitle);
+        }
+        if (chapterNumber) {
             formData.append('chapterNumber', chapterNumber.toString());
         }
 
@@ -265,53 +271,116 @@ async function main() {
         const seriesPath = path.join(CONTENT_DIR, seriesName);
         if (!(await fs.stat(seriesPath)).isDirectory()) continue;
 
-        console.log(`\n📂 Procesando serie: ${seriesName}`.cyan.bold);
+        console.log(`\n📂 Procesando carpeta local: ${seriesName}`.cyan.bold);
 
-        let manga = mangasInDb.find(m => m.title.toLowerCase() === seriesName.toLowerCase());
-        
-        if (!manga) {
-            console.log(`   ✨ Serie "${seriesName}" no existe. Creándola...`.cyan);
-            try {
-                // Create basic manga entry
-                const newMangaResponse = await axios.post(`${API_URL}/manga`, {
-                    title: seriesName,
-                    type: 'Manga', // Default type
-                    genres: [], // Empty genres initially
-                    description: `Manga ${seriesName}`
-                }, {
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                manga = newMangaResponse.data;
-                console.log(`   ✅ Serie creada con ID: ${manga._id}`.green);
-            } catch (error) {
-                console.error(`   ❌ Error creando serie "${seriesName}":`.red, error.response?.data || error.message);
-                continue;
-            }
+        // 1. Intentar match exacto
+        let manga = mangasInDb.find(m => m.title.toLowerCase().trim() === seriesName.toLowerCase().trim());
+        let confirmed = false;
+
+        if (manga) {
+            console.log(`   ✅ Coincidencia exacta encontrada: ${manga.title}`.green);
+            console.log(`      ID: ${manga._id} | Carpeta Destino: ${manga.folderPath || manga.title}`.gray);
+            confirmed = true;
         } else {
-            console.log(`   Found existing series: ${manga.title}`.gray);
+            // 2. Intentar match parcial / fuzzy
+            const matches = mangasInDb.filter(m => 
+                m.title.toLowerCase().includes(seriesName.toLowerCase()) || 
+                seriesName.toLowerCase().includes(m.title.toLowerCase())
+            );
+
+            console.log(`   ⚠️ No se encontró coincidencia exacta para "${seriesName}".`.yellow);
+            
+            const choices = matches.map(m => ({
+                name: `Asociar con: "${m.title}" (ID: ${m._id} | Folder: ${m.folderPath || m.title})`,
+                value: m
+            }));
+            
+            choices.push(new inquirer.Separator());
+            choices.push({ name: '🔍 Buscar manualmente en la lista', value: 'SEARCH' });
+            choices.push({ name: `✨ Crear NUEVA serie: "${seriesName}"`, value: 'CREATE' });
+            choices.push({ name: '⏭️ Saltar esta carpeta', value: 'SKIP' });
+
+            const answer = await inquirer.prompt([{
+                type: 'list',
+                name: 'action',
+                message: '¿Qué deseas hacer?',
+                choices: choices
+            }]);
+
+            if (answer.action === 'SKIP') {
+                console.log('   ⏭️ Saltando...'.gray);
+                continue;
+            } else if (answer.action === 'CREATE') {
+                try {
+                    console.log(`   ✨ Creando serie "${seriesName}"...`.cyan);
+                    const newMangaResponse = await axios.post(`${API_URL}/manga`, {
+                        title: seriesName,
+                        type: 'Manga',
+                        genres: [],
+                        description: `Manga ${seriesName}`
+                    }, {
+                        headers: { 'Authorization': `Bearer ${authToken}` }
+                    });
+                    manga = newMangaResponse.data;
+                    console.log(`   ✅ Serie creada con ID: ${manga._id}`.green);
+                    mangasInDb.push(manga); // Update local cache
+                    confirmed = true;
+                } catch (error) {
+                    console.error(`   ❌ Error creando serie:`.red, error.response?.data || error.message);
+                    continue;
+                }
+            } else if (answer.action === 'SEARCH') {
+                const searchAnswer = await inquirer.prompt([{
+                    type: 'input',
+                    name: 'query',
+                    message: 'Ingresa texto para buscar:'
+                }]);
+                
+                const searchResults = mangasInDb.filter(m => m.title.toLowerCase().includes(searchAnswer.query.toLowerCase()));
+                
+                if (searchResults.length === 0) {
+                    console.log('   ❌ No se encontraron resultados. Saltando carpeta.'.red);
+                    continue;
+                }
+
+                const searchSelection = await inquirer.prompt([{
+                    type: 'list',
+                    name: 'manga',
+                    message: 'Selecciona la serie:',
+                    choices: [
+                        ...searchResults.map(m => ({ name: m.title, value: m })),
+                        { name: 'Cancelar', value: null }
+                    ]
+                }]);
+
+                if (searchSelection.manga) {
+                    manga = searchSelection.manga;
+                    confirmed = true;
+                } else {
+                    continue;
+                }
+            } else {
+                manga = answer.action;
+                confirmed = true;
+            }
         }
 
-        const existingChapters = await getSeriesChapters(manga._id);
-        const existingNumbers = new Set(existingChapters.map(c => c.number));
+        if (!confirmed || !manga) continue;
 
+        const existingChapters = await getSeriesChapters(manga._id);
         const chapterFolders = await fs.readdir(seriesPath);
-        // Sort chapters numerically if possible
         chapterFolders.sort(naturalSort);
 
         for (const chapterName of chapterFolders) {
             const chapterPath = path.join(seriesPath, chapterName);
             if (!(await fs.stat(chapterPath)).isDirectory()) continue;
 
-            // Try to extract number from folder name "1", "Chapter 1", "1.5", etc.
-            // Simple approach: parse float from the folder name
             const chapterNum = parseFloat(chapterName.match(/[\d.]+/)?.[0]);
-
             if (isNaN(chapterNum)) {
                 console.log(`   ⚠️ Carpeta "${chapterName}" no parece un número de capítulo válido. Saltando...`.yellow);
                 continue;
             }
 
-            // Get images first to check count
             const files = await fs.readdir(chapterPath);
             const imageFiles = files
                 .filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f))
@@ -323,49 +392,36 @@ async function main() {
                 continue;
             }
 
-            // SMART SYNC CHECK
             const existingChapter = existingChapters.find(c => c.number === chapterNum);
             if (existingChapter) {
-                const remoteCount = existingChapter.pages ? existingChapter.pages.length : 0;
-                const localCount = imageFiles.length;
-
-                if (remoteCount === localCount) {
-                     console.log(`   ⏭️ Capítulo ${chapterNum} sincronizado (Local: ${localCount} = Remoto: ${remoteCount}). Saltando...`.gray);
-                     continue;
-                } else {
-                     console.log(`   🔄 REPARANDO Capítulo ${chapterNum}: Discrepancia detectada (Local: ${localCount} vs Remoto: ${remoteCount}).`.magenta.bold);
-                     console.log(`      Borrando versión anterior y resubiendo...`.magenta);
-                     
-                     // Delete old chapter via API if needed (Optional, or just overwrite via createChapter which usually updates if exists or we might need a delete endpoint)
-                     // Assuming backend 'createChapter' creates a NEW entry. We should ideally delete the old one or update it.
-                     // Since we don't have a specific "delete chapter" in this script, we'll assume createChapter will add a new one or update.
-                     // Ideally we should delete it first to avoid duplicates if the backend doesn't handle upsert by number.
-                     try {
-                        // Attempt to delete logic here if API supports it, otherwise proceed to overwrite/create new
-                        // For now, let's assume we proceed. The user wanted "fix".
-                     } catch (e) {}
-                }
+                 const remoteCount = existingChapter.pages ? existingChapter.pages.length : 0;
+                 const localCount = imageFiles.length;
+ 
+                 if (remoteCount === localCount) {
+                      console.log(`   ⏭️ Capítulo ${chapterNum} sincronizado. Saltando...`.gray);
+                      continue;
+                 } else {
+                      console.log(`   🔄 REPARANDO Capítulo ${chapterNum}: (Local: ${localCount} vs Remoto: ${remoteCount}).`.magenta);
+                 }
             } else {
-                console.log(`   📖 Procesando Capítulo ${chapterNum} (Nuevo)...`.white);
+                 console.log(`   📖 Procesando Capítulo ${chapterNum} (Nuevo)...`.white);
             }
 
             try {
                 process.stdout.write(`      Subiendo ${imageFiles.length} imágenes... `);
-                const urls = await uploadImages(imageFiles, manga.title, chapterNum);
+                // Pass manga._id to ensure correct folder path resolution in backend
+                // IMPORTANT: Backend uses manga._id as the root folder name for storage
+                const urls = await uploadImages(imageFiles, manga.title, chapterNum, manga._id);
                 
-                // Validación estricta de integridad
                 if (!urls || urls.length !== imageFiles.length || urls.some(u => !u)) {
                     throw new Error(`Integridad fallida: Se esperaban ${imageFiles.length} URLs, se obtuvieron ${urls ? urls.length : 0} válidas.`);
                 }
 
                 console.log(`✅`.green);
-                
                 await createChapter(manga._id, chapterNum, urls);
             } catch (error) {
                 console.log(`\n❌ ERROR EN CAPÍTULO ${chapterNum} - ABORTANDO`.red.bold);
                 console.log(`   Causa: ${error.message}`.red);
-                console.log(`   ⛔ NO se creó el capítulo en la base de datos para evitar contenido incompleto.`.red);
-                console.log(`   Saltando al siguiente capítulo...`.yellow);
             }
         }
     }

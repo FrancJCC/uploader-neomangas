@@ -24,7 +24,16 @@ async function login() {
             password: PASSWORD
         });
         authToken = response.data.accessToken;
-        console.log('✅ Login exitoso.'.green);
+        const user = response.data.user || {}; 
+        const userRoles = user.roles || [];
+        // Permitir admin, owner o editor
+        const hasPermission = userRoles.some(role => ['admin', 'owner', 'editor'].includes(role));
+        
+        console.log(`✅ Login exitoso. Roles: ${userRoles.join(', ')}`.green);
+        
+        if (!hasPermission) {
+             console.warn('⚠️ ADVERTENCIA: Este usuario no tiene permisos suficientes (Owner, Admin o Editor).'.red.bold);
+        }
     } catch (error) {
         console.error('❌ Error en login:'.red, error.message);
         process.exit(1);

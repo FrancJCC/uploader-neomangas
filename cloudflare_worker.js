@@ -3,7 +3,7 @@
 // para mantener las claves seguras y poder cambiarlas fácilmente.
 
 const DEFAULT_CONFIG = {
-  // Configuración PRIMARY (Corresponde al Bucket INTERMEDIO - NeoMangas2)
+  // Configuración PRIMARY (Nuevo Bucket - NeoMangas2)
   PRIMARY: {
     ACCESS_KEY_ID: '003f8dffc92c15b0000000001',
     SECRET_ACCESS_KEY: 'K003dGuOHI0UEnhHQh0HUMMbmDuVb0M',
@@ -11,24 +11,23 @@ const DEFAULT_CONFIG = {
     REGION: 'eu-central-003',
     ENDPOINT: 's3.eu-central-003.backblazeb2.com'
   },
-  // Configuración SECONDARY (Corresponde al Bucket VIEJO - NeoMangas)
-  SECONDARY: {
+  // Configuración SECONDARY (Viejo Bucket - NeoMangas)
+  TERTIARY: {
     ACCESS_KEY_ID: '003d6365952f9010000000001',
     SECRET_ACCESS_KEY: 'K003prqFINgITot+qLtSEBcAT2pXiOQ',
     BUCKET_NAME: 'NeoMangas',
     REGION: 'eu-central-003',
     ENDPOINT: 's3.eu-central-003.backblazeb2.com'
   },
-  // Configuración TERTIARY (Corresponde al Bucket NUEVO)
-  TERTIARY: {
-    ACCESS_KEY_ID: '', // Configurar en Cloudflare ENV
-    SECRET_ACCESS_KEY: '',
-    BUCKET_NAME: '',
-    REGION: '',
-    ENDPOINT: ''
+  // Configuración TERTIARY (Tercer Bucket - El más antiguo/nuevo)
+  SECONDARY: {
+    ACCESS_KEY_ID: '0030d2868c2ce360000000001', // Configurar en Cloudflare ENV
+    SECRET_ACCESS_KEY: 'K003jG8S99gdBJ6pX9LXCKJGI6Kog+Q',
+    BUCKET_NAME: 'NeoMangas3',
+    REGION: 'eu-central-003',
+    ENDPOINT: 's3.eu-central-003.backblazeb2.com'
   }
 };
-
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -314,8 +313,7 @@ async function sha256Hex(message) {
 }
 
 async function hmacHex(key, message) {
-    const msgBuffer = new TextEncoder().encode(message);
-    const signature = await crypto.subtle.sign('HMAC', key, msgBuffer);
+    const signature = await hmacRaw(key, message);
     return bufferToHex(signature);
 }
 
