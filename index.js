@@ -273,99 +273,26 @@ async function main() {
 
         console.log(`\n📂 Procesando carpeta local: ${seriesName}`.cyan.bold);
 
-        // 1. Intentar match exacto
-        let manga = mangasInDb.find(m => m.title.toLowerCase().trim() === seriesName.toLowerCase().trim());
-        let confirmed = false;
-
-        if (manga) {
-            console.log(`   ✅ Coincidencia exacta encontrada: ${manga.title}`.green);
-            console.log(`      ID: ${manga._id} | Carpeta Destino: ${manga.folderPath || manga.title}`.gray);
-            confirmed = true;
-        } else {
-            // 2. Intentar match parcial / fuzzy
-            const matches = mangasInDb.filter(m => 
-                m.title.toLowerCase().includes(seriesName.toLowerCase()) || 
-                seriesName.toLowerCase().includes(m.title.toLowerCase())
-            );
-
-            console.log(`   ⚠️ No se encontró coincidencia exacta para "${seriesName}".`.yellow);
+        // 1. Validar que el nombre de la carpeta sea un ID válido
+        // El usuario indicó que las carpetas locales TIENEN el ID de la serie.
+        let manga = mangasInDb.find(m => m._id === seriesName);
+        
+        if (!manga) {
+            console.log(`   ⚠️ Carpeta "${seriesName}" no coincide con ningún ID de manga en la BD.`.yellow);
             
-            const choices = matches.map(m => ({
-                name: `Asociar con: "${m.title}" (ID: ${m._id} | Folder: ${m.folderPath || m.title})`,
-                value: m
-            }));
-            
-            choices.push(new inquirer.Separator());
-            choices.push({ name: '🔍 Buscar manualmente en la lista', value: 'SEARCH' });
-            choices.push({ name: `✨ Crear NUEVA serie: "${seriesName}"`, value: 'CREATE' });
-            choices.push({ name: '⏭️ Saltar esta carpeta', value: 'SKIP' });
-
-            const answer = await inquirer.prompt([{
-                type: 'list',
-                name: 'action',
-                message: '¿Qué deseas hacer?',
-                choices: choices
-            }]);
-
-            if (answer.action === 'SKIP') {
-                console.log('   ⏭️ Saltando...'.gray);
-                continue;
-            } else if (answer.action === 'CREATE') {
-                try {
-                    console.log(`   ✨ Creando serie "${seriesName}"...`.cyan);
-                    const newMangaResponse = await axios.post(`${API_URL}/manga`, {
-                        title: seriesName,
-                        type: 'Manga',
-                        genres: [],
-                        description: `Manga ${seriesName}`
-                    }, {
-                        headers: { 'Authorization': `Bearer ${authToken}` }
-                    });
-                    manga = newMangaResponse.data;
-                    console.log(`   ✅ Serie creada con ID: ${manga._id}`.green);
-                    mangasInDb.push(manga); // Update local cache
-                    confirmed = true;
-                } catch (error) {
-                    console.error(`   ❌ Error creando serie:`.red, error.response?.data || error.message);
-                    continue;
-                }
-            } else if (answer.action === 'SEARCH') {
-                const searchAnswer = await inquirer.prompt([{
-                    type: 'input',
-                    name: 'query',
-                    message: 'Ingresa texto para buscar:'
-                }]);
-                
-                const searchResults = mangasInDb.filter(m => m.title.toLowerCase().includes(searchAnswer.query.toLowerCase()));
-                
-                if (searchResults.length === 0) {
-                    console.log('   ❌ No se encontraron resultados. Saltando carpeta.'.red);
-                    continue;
-                }
-
-                const searchSelection = await inquirer.prompt([{
-                    type: 'list',
-                    name: 'manga',
-                    message: 'Selecciona la serie:',
-                    choices: [
-                        ...searchResults.map(m => ({ name: m.title, value: m })),
-                        { name: 'Cancelar', value: null }
-                    ]
-                }]);
-
-                if (searchSelection.manga) {
-                    manga = searchSelection.manga;
-                    confirmed = true;
-                } else {
-                    continue;
-                }
-            } else {
-                manga = answer.action;
-                confirmed = true;
+            // Ayuda visual: verificar si por error es un título
+            const titleMatch = mangasInDb.find(m => m.title.toLowerCase().trim() === seriesName.toLowerCase().trim());
+            if (titleMatch) {
+                 console.log(`      💡 PARECE UN TÍTULO: "${titleMatch.title}".`.cyan); 
+                 console.log(`      👉 Renombra la carpeta a: "${titleMatch._id}" para subir.`.cyan.bold);
             }
+            
+            console.log(`   ⏭️ Saltando...`.gray);
+            continue;
         }
 
-        if (!confirmed || !manga) continue;
+        console.log(`   ✅ ID Validado: ${manga.title}`.green);
+        console.log(`      ID: ${manga._id}`.gray);
 
         const existingChapters = await getSeriesChapters(manga._id);
         const chapterFolders = await fs.readdir(seriesPath);
@@ -411,7 +338,14 @@ async function main() {
                 process.stdout.write(`      Subiendo ${imageFiles.length} imágenes... `);
                 // Pass manga._id to ensure correct folder path resolution in backend
                 // IMPORTANT: Backend uses manga._id as the root folder name for storage
-                const urls = await uploadImages(imageFiles, manga.title, chapterNum, manga._id);
+                if (!manga._id) {
+                    throw new Error(`Error crítico: La serie "${manga.title}" no tiene _id definido.`);
+                }
+                // Ensure ID is a string
+                const mangaIdStr = String(manga._id);
+                // console.log(`Debug: Enviando mangaId=${mangaIdStr}`); 
+                
+                const urls = await uploadImages(imageFiles, manga.title, chapterNum, mangaIdStr);
                 
                 if (!urls || urls.length !== imageFiles.length || urls.some(u => !u)) {
                     throw new Error(`Integridad fallida: Se esperaban ${imageFiles.length} URLs, se obtuvieron ${urls ? urls.length : 0} válidas.`);
