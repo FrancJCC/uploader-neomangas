@@ -1,4 +1,3 @@
-
 // CONFIGURACIÓN DE LOS BUCKETS
 // IMPORTANTE: Configurar estas variables en el panel de Cloudflare (Settings > Variables)
 // para mantener las claves seguras y poder cambiarlas fácilmente.
@@ -39,26 +38,14 @@ export default {
       return new Response(null, {
         headers: {
           'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': '*',
+          'Access-Control-Expose-Headers': 'ETag'
         },
       });
     }
 
-    // --- 1. Obtener la ruta limpia ---
-    let path = url.pathname;
-    try {
-        path = decodeURIComponent(path);
-    } catch (e) {}
-
-    // Eliminar barras iniciales y espacios
-    let key = path.replace(/^\/+/, '').trim();
-    
-    if (!key) {
-      return new Response('NeoManga CDN Router Active', { status: 200 });
-    }
-
-    // --- 2. Preparar configuraciones desde ENV o defaults ---
+    // --- 1. Preparar configuraciones desde ENV o defaults ---
     
     // OLD CONFIG (Mapeado a SECONDARY/NeoMangas)
     const oldConfig = {
@@ -87,81 +74,168 @@ export default {
       endpoint: env.TERTIARY_ENDPOINT || DEFAULT_CONFIG.TERTIARY.ENDPOINT
     };
 
-    // --- 3. INTENTO 1: Buscar en OLD BUCKET (Secondary/NeoMangas) ---
-    let response;
+    const configs = [oldConfig, intermediateConfig, newConfig].filter(c => c.bucketName && c.accessKeyId);
+
+    // --- 2. Determinación de Ruta y Bucket Específico ---
+    let path = url.pathname;
+    try { path = decodeURIComponent(path); } catch (e) {}
     
-    if (oldConfig.bucketName && oldConfig.accessKeyId) {
-       response = await fetchFromBucket(key, oldConfig);
-       
-       if (response.status === 200 || response.status === 304) {
-          const newHeaders = new Headers(response.headers);
-          newHeaders.set('X-Source-Bucket', 'Old');
-          return wrapResponse(response, newHeaders, key);
-       }
+    // Detectar si la ruta empieza con el nombre de un bucket (Path Style Support)
+    // Ejemplo: /NeoMangas/path/to/file.webp
+    let targetConfig = null;
+    let key = path.replace(/^\/+/, '').trim(); // Default key
+    
+    // Check Hostname (Virtual Host Style)
+    // TODO: Implementar si se usa DNS wildcard, pero por ahora nos enfocamos en Path Style que es más común con Workers
+
+    // Check Path Prefix
+    for (const config of configs) {
+        if (path.startsWith(`/${config.bucketName}/`)) {
+            targetConfig = config;
+            // Remove bucket name from key
+            key = path.replace(new RegExp(`^/${config.bucketName}/`), '').replace(/^\/+/, '').trim();
+            break;
+        } else if (path === `/${config.bucketName}`) { // Root of bucket
+            targetConfig = config;
+            key = '';
+            break;
+        }
     }
 
-    // --- 4. INTENTO 2: Buscar en INTERMEDIATE BUCKET (Primary/NeoMangas2) ---
-    if (!response || response.status === 404) {
-        const intermediateResponse = await fetchFromBucket(key, intermediateConfig);
-        
-        if (intermediateResponse.status === 200 || intermediateResponse.status === 304) {
-           const newHeaders = new Headers(intermediateResponse.headers);
-           newHeaders.set('X-Source-Bucket', 'Intermediate');
-           return wrapResponse(intermediateResponse, newHeaders, key);
-        }
+    // Permitir root (key vacía) solo si es ListObjects (tiene params)
+    const isListObjects = url.searchParams.has('list-type') || url.searchParams.has('prefix');
+    
+    if (!key && !isListObjects && !targetConfig) {
+      return new Response('NeoManga CDN Router Active', { status: 200 });
+    }
+
+    // --- 3. LÓGICA DE PROXY ---
+    
+    // CASO A: Bucket Específico Detectado (Backend Operations / Explicit Path)
+    if (targetConfig) {
+        const response = await fetchFromBucket(key, targetConfig, request);
+        // Si falla con bucket específico, devolvemos el error tal cual (no fallback)
+        // Excepto si es 404 y es un GET, tal vez queramos fallback? 
+        // NO, si el cliente pidió un bucket específico, espera respuesta de ESE bucket.
+        // Esto es crucial para operaciones de listado/borrado/escritura.
+        return wrapResponse(response, response.headers, key);
+    }
+
+    // CASO B: Unified Namespace (CDN Mode - Try All)
+    // Solo para GET/HEAD. Si es PUT/DELETE sin bucket, es peligroso o ambiguo.
+    // Asumiremos que PUT/DELETE siempre deben venir con bucket en path si usamos el SDK correctamente.
+    // Pero si llega un DELETE /foo.jpg, ¿qué hacemos? 
+    // Opción: Intentar borrar en todos? O borrar en el primero que exista?
+    // Mejor: Si es WRITE method y no hay bucket, rechazar o intentar en el Default (Intermediate)?
+    // Por seguridad, para modificaciones requerimos Bucket explícito (Path Style).
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+         return new Response('Method requires explicit bucket in path (Path Style)', { status: 400 });
+    }
+
+    // Loop para GET (CDN)
+    let response;
+    
+    // INTENTO 1: OLD BUCKET
+    if (oldConfig.bucketName && oldConfig.accessKeyId) {
+       response = await fetchFromBucket(key, oldConfig, request);
+       if (isSuccess(response)) return wrapResponse(response, response.headers, key);
+    }
+
+    // INTENTO 2: INTERMEDIATE BUCKET
+    if (shouldContinue(response) && intermediateConfig.bucketName && intermediateConfig.accessKeyId) {
+        const intermediateResponse = await fetchFromBucket(key, intermediateConfig, request);
+        if (isSuccess(intermediateResponse)) return wrapResponse(intermediateResponse, intermediateResponse.headers, key);
         response = intermediateResponse;
     }
 
-    // --- 5. INTENTO 3: Buscar en NEW BUCKET (Tertiary) ---
-    if ((!response || response.status === 404) && newConfig.bucketName && newConfig.accessKeyId) {
-        const newResponse = await fetchFromBucket(key, newConfig);
-        
-        if (newResponse.status === 200 || newResponse.status === 304) {
-           const newHeaders = new Headers(newResponse.headers);
-           newHeaders.set('X-Source-Bucket', 'New');
-           return wrapResponse(newResponse, newHeaders, key);
-        }
+    // INTENTO 3: NEW BUCKET
+    if (shouldContinue(response) && newConfig.bucketName && newConfig.accessKeyId) {
+        const newResponse = await fetchFromBucket(key, newConfig, request);
+        if (isSuccess(newResponse)) return wrapResponse(newResponse, newResponse.headers, key);
         response = newResponse;
      }
 
-    // Si response sigue siendo undefined (ninguna config válida), devolvemos 404 genérico
+    // Fallback
     if (!response) {
         return new Response('Not Found', { status: 404 });
     }
 
-    return wrapResponse(response, new Headers(response.headers), key);
+    return wrapResponse(response, response.headers, key);
   },
 };
 
+function isSuccess(response) {
+    return response && (response.status >= 200 && response.status < 300 || response.status === 304);
+}
+
+function shouldContinue(response) {
+    // Continuar si no hay respuesta o es 404/403 (Maybe file not in this bucket)
+    return !response || response.status === 404 || response.status === 403;
+}
+
 // --- HELPER: Fetch from specific bucket with AWS Signature V4 ---
-async function fetchFromBucket(key, config) {
+async function fetchFromBucket(key, config, originalRequest) {
     const now = new Date();
     const datetime = now.toISOString().replace(/[:-]|\.\d{3}/g, ""); // YYYYMMDDTHHMMSSZ
     const date = datetime.substr(0, 8); // YYYYMMDD
+    const method = originalRequest.method;
+    const url = new URL(originalRequest.url);
 
     // Path Style URI: /Bucket/Key
     const encodeSegment = (segment) => {
         return encodeURIComponent(segment).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());
     };
     
-    const encodedKey = key.split('/').map(encodeSegment).join('/');
-    const canonicalUri = `/${config.bucketName}/${encodedKey}`;
+    // Construir URI canónica
+    let canonicalUri = '/';
+    if (key) {
+        const encodedKey = key.split('/').map(encodeSegment).join('/');
+        canonicalUri = `/${config.bucketName}/${encodedKey}`;
+    } else {
+        canonicalUri = `/${config.bucketName}/`; // Root for ListObjects
+    }
 
     const host = config.endpoint;
-    const contentSha256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'; // Empty body hash
+    
+    // Hash del Body
+    let bodyBuffer = new Uint8Array(0);
+    if (method !== 'GET' && method !== 'HEAD') {
+        try {
+            bodyBuffer = new Uint8Array(await originalRequest.clone().arrayBuffer());
+        } catch (e) {}
+    }
+    const contentSha256 = await sha256Hex(bodyBuffer);
 
-    const canonicalHeaders = 
+    // Canonical Query String (Sorted)
+    const searchParams = new URLSearchParams(url.search);
+    searchParams.sort();
+    const canonicalQueryString = [...searchParams.entries()]
+        .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v))
+        .join('&');
+
+    // Headers Canónicos
+    let canonicalHeaders = 
       `host:${host}\n` +
       `x-amz-content-sha256:${contentSha256}\n` +
       `x-amz-date:${datetime}\n`;
       
-    const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
+    let signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
 
-    const method = 'GET';
+    // Manejar headers extra necesarios
+    const extraHeadersToSign = ['x-amz-copy-source', 'x-amz-acl', 'content-type'];
+    const originalHeaders = originalRequest.headers;
+    
+    for (const header of extraHeadersToSign) {
+        if (originalHeaders.has(header)) {
+            canonicalHeaders += `${header}:${originalHeaders.get(header).trim()}\n`;
+            signedHeaders += `;${header}`;
+        }
+    }
+
     const canonicalRequest = 
       method + '\n' +
       canonicalUri + '\n' +
-      '' + '\n' +
+      canonicalQueryString + '\n' +
       canonicalHeaders + '\n' +
       signedHeaders + '\n' +
       contentSha256;
@@ -186,27 +260,40 @@ async function fetchFromBucket(key, config) {
     fetchHeaders.set('x-amz-date', datetime);
     fetchHeaders.set('x-amz-content-sha256', contentSha256);
     
-    const finalUrl = `https://${config.endpoint}/${config.bucketName}/${encodedKey}`;
+    for (const header of extraHeadersToSign) {
+        if (originalHeaders.has(header)) {
+            fetchHeaders.set(header, originalHeaders.get(header));
+        }
+    }
+
+    let finalUrl = `https://${config.endpoint}${canonicalUri}`;
+    if (canonicalQueryString) {
+        finalUrl += `?${canonicalQueryString}`;
+    }
 
     try {
         const response = await fetch(finalUrl, {
-            method: 'GET',
-            headers: fetchHeaders
+            method: method,
+            headers: fetchHeaders,
+            body: (method === 'GET' || method === 'HEAD') ? null : bodyBuffer
         });
         return response;
     } catch (error) {
-        return new Response(null, { status: 404 });
+        return new Response(null, { status: 502 });
     }
 }
 
 function wrapResponse(response, headers, key) {
-    // Copiar headers
     const newHeaders = new Headers(headers);
     newHeaders.set('Access-Control-Allow-Origin', '*');
-    newHeaders.set('Cache-Control', 'public, max-age=31536000');
+    newHeaders.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, DELETE, OPTIONS');
+    newHeaders.set('Access-Control-Expose-Headers', 'ETag');
     
-    // Si es imagen, asegurar Content-Type correcto
-    if (!newHeaders.has('Content-Type')) {
+    if (response.status === 200 && (!headers.has('Cache-Control'))) {
+         newHeaders.set('Cache-Control', 'public, max-age=31536000');
+    }
+    
+    if (!newHeaders.has('Content-Type') && key) {
         if (key.endsWith('.webp')) newHeaders.set('Content-Type', 'image/webp');
         else if (key.endsWith('.jpg') || key.endsWith('.jpeg')) newHeaders.set('Content-Type', 'image/jpeg');
         else if (key.endsWith('.png')) newHeaders.set('Content-Type', 'image/png');
@@ -221,7 +308,7 @@ function wrapResponse(response, headers, key) {
 
 // --- CRYPTO HELPERS ---
 async function sha256Hex(message) {
-    const msgBuffer = new TextEncoder().encode(message);
+    const msgBuffer = typeof message === 'string' ? new TextEncoder().encode(message) : message;
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
     return bufferToHex(hashBuffer);
 }

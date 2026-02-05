@@ -1,6 +1,6 @@
-# NeoManga Uploader
+# NeoMangas Uploader
 
-Herramienta automatizada para subir capítulos de manga al backend de NeoManga. Soporta subida por lotes y verificación de integridad.
+Herramienta automatizada para subir capítulos de manga al backend de NeoMangas. Soporta subida por lotes y verificación de integridad.
 
 ## 🚀 Características
 

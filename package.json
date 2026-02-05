@@ -1,7 +1,7 @@
 {
-  "name": "neomanga-uploader",
+  "name": "neomangas-uploader",
   "version": "1.0.0",
-  "description": "Bulk uploader for NeoManga",
+  "description": "Bulk uploader for NeoMangas",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
