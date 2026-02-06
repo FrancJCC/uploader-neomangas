@@ -55,8 +55,43 @@ async function getMangas() {
 }
 
 async function getChaptersBySeries(seriesId) {
-  const res = await axios.get(`${API_URL}/chapters/series/${seriesId}?includePages=true`)
-  return res.data
+  try {
+    const res = await axios.get(`${API_URL}/chapters/series/${seriesId}?includePages=true`)
+    const chapters = res.data
+    return await fetchDetailsForChapters(chapters)
+  } catch (e) {
+    return []
+  }
+}
+
+async function fetchDetailsForChapters(chapters) {
+  if (!chapters || chapters.length === 0) return [];
+  
+  if (chapters[0].pages && Array.isArray(chapters[0].pages)) {
+      return chapters;
+  }
+  
+  const BATCH_SIZE = 5;
+  const results = [];
+  
+  for (let i = 0; i < chapters.length; i += BATCH_SIZE) {
+      const batch = chapters.slice(i, i + BATCH_SIZE);
+      const promises = batch.map(async (chapter) => {
+          if (chapter.pages && Array.isArray(chapter.pages)) return chapter;
+          
+          try {
+              const detail = await axios.get(`${API_URL}/chapters/${chapter._id}`);
+              return detail.data;
+          } catch (e) {
+              return chapter;
+          }
+      });
+      
+      const batchResults = await Promise.all(promises);
+      results.push(...batchResults);
+  }
+  
+  return results;
 }
 
 function makeKey(seriesTitle, chapterTitle, index, ext) {

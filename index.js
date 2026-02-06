@@ -101,10 +101,52 @@ async function getMangas() {
 async function getSeriesChapters(seriesId) {
     try {
         const response = await axios.get(`${API_URL}/chapters/series/${seriesId}?includePages=true`);
-        return response.data;
+        const chapters = response.data;
+        
+        // WORKAROUND: Si el backend no devuelve las páginas en el listado (debido a un bug en el controller),
+        // las buscamos individualmente para asegurarnos de no resubir cosas innecesarias.
+        return await fetchDetailsForChapters(chapters);
     } catch (error) {
         return [];
     }
+}
+
+async function fetchDetailsForChapters(chapters) {
+    // Si la lista está vacía, retornar vacío
+    if (!chapters || chapters.length === 0) return [];
+    
+    // Verificar si el primer capítulo ya tiene páginas. Si sí, asumimos que todos las tienen y retornamos.
+    // (A menos que haya mezcla, pero es raro. Optimizamos para el caso común).
+    if (chapters[0].pages && Array.isArray(chapters[0].pages)) {
+        return chapters;
+    }
+
+    // console.log('   ℹ️  Listado sin páginas detectado. Obteniendo detalles individualmente...'.gray);
+    
+    const BATCH_SIZE = 5; // Límite de concurrencia
+    const results = [];
+    
+    for (let i = 0; i < chapters.length; i += BATCH_SIZE) {
+        const batch = chapters.slice(i, i + BATCH_SIZE);
+        const promises = batch.map(async (chapter) => {
+            if (chapter.pages && Array.isArray(chapter.pages)) return chapter; // Ya tiene páginas
+            
+            try {
+                // Fetch individual para obtener 'pages'
+                const detail = await axios.get(`${API_URL}/chapters/${chapter._id}`);
+                return detail.data;
+            } catch (e) {
+                // Si falla el detalle, devolvemos el original (asumiendo que quizás no tiene páginas o error)
+                // console.warn(`      ⚠️  No se pudo obtener detalle para Cap ${chapter.number}: ${e.message}`.gray);
+                return chapter;
+            }
+        });
+        
+        const batchResults = await Promise.all(promises);
+        results.push(...batchResults);
+    }
+    
+    return results;
 }
 
 const https = require('https');
