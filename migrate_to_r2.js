@@ -74,7 +74,7 @@ async function fetchDetailsForChapters(chapters) {
   
   console.log('   ℹ️  Fetching chapter details...'.cyan);
 
-  const BATCH_SIZE = 3;
+  const BATCH_SIZE = 1; // SECUENCIAL
   const results = [];
   
   for (let i = 0; i < chapters.length; i += BATCH_SIZE) {
@@ -83,24 +83,36 @@ async function fetchDetailsForChapters(chapters) {
           if (chapter.pages && Array.isArray(chapter.pages)) return chapter;
           
           let attempts = 0;
-          while (attempts < 3) {
+          const maxAttempts = 5;
+
+          while (attempts < maxAttempts) {
             try {
-                const detail = await axios.get(`${API_URL}/chapters/${chapter._id}`, { timeout: 10000 });
+                const detail = await axios.get(`${API_URL}/chapters/${chapter._id}`, { timeout: 15000 });
                 return detail.data;
             } catch (e) {
                 attempts++;
-                if (attempts >= 3) {
+                const isRateLimit = e.response && e.response.status === 429;
+                
+                if (isRateLimit) {
+                    const waitTime = attempts * 5000;
+                    console.log(`      ⏳ Rate Limit (429) on Cap ${chapter.number}. Waiting ${waitTime/1000}s...`.yellow);
+                    await new Promise(r => setTimeout(r, waitTime));
+                    continue;
+                }
+
+                if (attempts >= maxAttempts) {
                     console.log(`      ⚠️  Failed to fetch details for Cap ${chapter.number}: ${e.message}`.yellow);
+                    chapter._verificationFailed = true;
                     return chapter;
                 }
-                await new Promise(r => setTimeout(r, 500 * attempts));
+                await new Promise(r => setTimeout(r, 1000 * attempts));
             }
           }
       });
       
       const batchResults = await Promise.all(promises);
       results.push(...batchResults);
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 500));
   }
   
   return results;

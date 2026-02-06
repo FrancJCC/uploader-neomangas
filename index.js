@@ -124,7 +124,7 @@ async function fetchDetailsForChapters(chapters) {
 
     console.log('   ℹ️  Verificando estado de capítulos en servidor (Fetch Details)...'.cyan);
     
-    const BATCH_SIZE = 3; // Reducido para evitar saturación
+    const BATCH_SIZE = 1; // CRÍTICO: Reducido a 1 (secuencial) para evitar 429 a toda costa
     const results = [];
     
     for (let i = 0; i < chapters.length; i += BATCH_SIZE) {
@@ -132,20 +132,36 @@ async function fetchDetailsForChapters(chapters) {
         const promises = batch.map(async (chapter) => {
             if (chapter.pages && Array.isArray(chapter.pages)) return chapter; // Ya tiene páginas
             
-            // Reintentos simples
+            // Reintentos robustos con Backoff Exponencial
             let attempts = 0;
-            while (attempts < 3) {
+            const maxAttempts = 5;
+            
+            while (attempts < maxAttempts) {
                 try {
-                    const detail = await axios.get(`${API_URL}/chapters/${chapter._id}`, { timeout: 10000 });
+                    const detail = await axios.get(`${API_URL}/chapters/${chapter._id}`, { timeout: 15000 });
                     return detail.data;
                 } catch (e) {
                     attempts++;
-                    if (attempts >= 3) {
-                        console.warn(`      ⚠️  No se pudo verificar Cap ${chapter.number}: ${e.message}. Se asumirá incompleto.`.yellow);
-                        return chapter; // Original (sin páginas)
+                    const isRateLimit = e.response && e.response.status === 429;
+                    
+                    if (isRateLimit) {
+                        const waitTime = attempts * 5000; // 5s, 10s, 15s...
+                        console.log(`      ⏳ Rate Limit (429) en Cap ${chapter.number}. Esperando ${waitTime/1000}s...`.yellow);
+                        await new Promise(r => setTimeout(r, waitTime));
+                        // No incrementamos 'attempts' drásticamente para darle más chances al 429
+                        continue; 
                     }
-                    // Esperar un poco antes de reintentar
-                    await new Promise(r => setTimeout(r, 500 * attempts));
+
+                    if (attempts >= maxAttempts) {
+                        console.error(`      ❌ Error verificando Cap ${chapter.number}: ${e.message}.`.red);
+                        // MARCAMOS EL CAPÍTULO COMO ERROR PARA NO TOCARLO
+                        // Retornamos un objeto especial o el original con una flag
+                        chapter._verificationFailed = true; 
+                        return chapter; 
+                    }
+                    
+                    // Error genérico, esperar poco
+                    await new Promise(r => setTimeout(r, 1000 * attempts));
                 }
             }
         });
@@ -153,8 +169,8 @@ async function fetchDetailsForChapters(chapters) {
         const batchResults = await Promise.all(promises);
         results.push(...batchResults);
         
-        // Pequeña pausa entre lotes
-        await new Promise(r => setTimeout(r, 200));
+        // Pausa obligatoria entre solicitudes
+        await new Promise(r => setTimeout(r, 500));
     }
     
     return results;
@@ -373,6 +389,13 @@ async function main() {
             }
 
             const existingChapter = existingChapters.find(c => c.number === chapterNum);
+            
+            // CRÍTICO: Si falló la verificación, NO TOCAR NADA para evitar corromper datos válidos.
+            if (existingChapter && existingChapter._verificationFailed) {
+                 console.log(`   ⛔ SALTANDO Cap ${chapterNum} por error de verificación (Posible Rate Limit).`.red.bold);
+                 continue;
+            }
+
             if (existingChapter) {
                  const remoteCount = existingChapter.pages ? existingChapter.pages.length : 0;
                  const localCount = imageFiles.length;
