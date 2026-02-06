@@ -100,7 +100,7 @@ async function getMangas() {
 
 async function getSeriesChapters(seriesId) {
     try {
-        const response = await axios.get(`${API_URL}/chapters/series/${seriesId}`);
+        const response = await axios.get(`${API_URL}/chapters/series/${seriesId}?includePages=true`);
         return response.data;
     } catch (error) {
         return [];
@@ -117,7 +117,7 @@ const httpsAgent = new https.Agent({
 });
 
 async function uploadImages(imagePaths, seriesTitle, chapterNumber, mangaId) {
-    const BATCH_SIZE = 5; // Reducido de 10 a 5 para evitar sobrecarga
+    const BATCH_SIZE = 2; // Reducido a 2 para evitar sobrecarga y caídas del backend
     const allUrls = new Array(imagePaths.length);
     let completed = 0;
 

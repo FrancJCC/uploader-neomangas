@@ -51,7 +51,7 @@ async function getMangas() {
 
 async function getSeriesChapters(seriesId) {
     try {
-        const response = await axios.get(`${API_URL}/chapters/series/${seriesId}`);
+        const response = await axios.get(`${API_URL}/chapters/series/${seriesId}?includePages=true`);
         return response.data.map(c => c.number); // Retorna solo los números
     } catch (error) {
         return [];
