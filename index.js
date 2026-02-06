@@ -100,19 +100,30 @@ async function getMangas() {
 
 async function getSeriesChapters(seriesId) {
     try {
-        // OPTIMIZATION: No pedimos pages en el listado para evitar OOM en el backend.
-        // fetchDetailsForChapters se encargará de obtenerlas individualmente si faltan.
-        const response = await axios.get(`${API_URL}/chapters/series/${seriesId}`);
+        // OPTIMIZACIÓN SUPREMA: Usar endpoint específico de sincronización
+        // Retorna: [{ _id, number, pageCount }]
+        // Esto evita OOM (no trae páginas) y evita API Rate Limits (1 llamada vs N llamadas)
+        const response = await axios.get(`${API_URL}/chapters/series/${seriesId}/sync-check`);
         const chapters = response.data;
         
-        // WORKAROUND: Si el backend no devuelve las páginas en el listado (debido a un bug en el controller),
-        // las buscamos individualmente para asegurarnos de no resubir cosas innecesarias.
-        return await fetchDetailsForChapters(chapters);
+        // Transformar al formato que espera el uploader
+        return chapters.map(c => ({
+            ...c,
+            pages: new Array(c.pageCount || 0).fill('placeholder') // Array dummy para que length funcione
+        }));
     } catch (error) {
-        return [];
+        // Fallback por si el backend no está actualizado
+        console.warn('   ⚠️ Endpoint /sync-check no disponible, usando método legacy...'.yellow);
+        try {
+             const response = await axios.get(`${API_URL}/chapters/series/${seriesId}`);
+             return await fetchDetailsForChapters(response.data);
+        } catch (e) {
+            return [];
+        }
     }
 }
 
+// YA NO SE USA (Legacy fallback)
 async function fetchDetailsForChapters(chapters) {
     // Si la lista está vacía, retornar vacío
     if (!chapters || chapters.length === 0) return [];

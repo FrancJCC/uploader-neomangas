@@ -56,15 +56,27 @@ async function getMangas() {
 
 async function getChaptersBySeries(seriesId) {
   try {
-    // OPTIMIZATION: Fetch light list first, then details
-    const res = await axios.get(`${API_URL}/chapters/series/${seriesId}`)
-    const chapters = res.data
-    return await fetchDetailsForChapters(chapters)
+    // OPTIMIZATION: Use new sync-check endpoint
+    const res = await axios.get(`${API_URL}/chapters/series/${seriesId}/sync-check`);
+    const chapters = res.data;
+    
+    return chapters.map(c => ({
+      ...c,
+      pages: new Array(c.pageCount || 0).fill('placeholder')
+    }));
   } catch (e) {
-    return []
+    // Fallback
+    console.log('   ⚠️ Sync check failed, using legacy fetch...'.yellow);
+    try {
+      const res = await axios.get(`${API_URL}/chapters/series/${seriesId}`);
+      return await fetchDetailsForChapters(res.data);
+    } catch(err) {
+      return [];
+    }
   }
 }
 
+// Legacy fallback
 async function fetchDetailsForChapters(chapters) {
   if (!chapters || chapters.length === 0) return [];
   
