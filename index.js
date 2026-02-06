@@ -169,8 +169,9 @@ async function fetchDetailsForChapters(chapters) {
         const batchResults = await Promise.all(promises);
         results.push(...batchResults);
         
-        // Pausa obligatoria entre solicitudes
-        await new Promise(r => setTimeout(r, 500));
+        // Pausa obligatoria entre solicitudes para respetar el límite de 60 req/min (1 req/seg)
+        // Usamos 1200ms para tener un margen de seguridad.
+        await new Promise(r => setTimeout(r, 1200));
     }
     
     return results;

@@ -112,7 +112,7 @@ async function fetchDetailsForChapters(chapters) {
       
       const batchResults = await Promise.all(promises);
       results.push(...batchResults);
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 1200));
   }
   
   return results;
