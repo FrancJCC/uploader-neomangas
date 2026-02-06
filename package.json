@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node index.js",
     "verify": "node verify_uploads.js",
-    "migrate:r2": "node migrate_to_r2.js"
+    "migrate:r2": "node migrate_to_r2.js",
+    "build": "pkg index.js --targets node18-win-x64 --output uploader.exe",
+    "build:verify": "pkg verify_uploads.js --targets node18-win-x64 --output verify.exe"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.511.0",
@@ -16,5 +18,8 @@
     "form-data": "^4.0.0",
     "fs-extra": "^11.1.1",
     "inquirer": "^8.2.7"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
   }
 }
