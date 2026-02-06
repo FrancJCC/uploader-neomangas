@@ -72,7 +72,9 @@ async function fetchDetailsForChapters(chapters) {
       return chapters;
   }
   
-  const BATCH_SIZE = 5;
+  console.log('   ℹ️  Fetching chapter details...'.cyan);
+
+  const BATCH_SIZE = 3;
   const results = [];
   
   for (let i = 0; i < chapters.length; i += BATCH_SIZE) {
@@ -80,16 +82,25 @@ async function fetchDetailsForChapters(chapters) {
       const promises = batch.map(async (chapter) => {
           if (chapter.pages && Array.isArray(chapter.pages)) return chapter;
           
-          try {
-              const detail = await axios.get(`${API_URL}/chapters/${chapter._id}`);
-              return detail.data;
-          } catch (e) {
-              return chapter;
+          let attempts = 0;
+          while (attempts < 3) {
+            try {
+                const detail = await axios.get(`${API_URL}/chapters/${chapter._id}`, { timeout: 10000 });
+                return detail.data;
+            } catch (e) {
+                attempts++;
+                if (attempts >= 3) {
+                    console.log(`      ⚠️  Failed to fetch details for Cap ${chapter.number}: ${e.message}`.yellow);
+                    return chapter;
+                }
+                await new Promise(r => setTimeout(r, 500 * attempts));
+            }
           }
       });
       
       const batchResults = await Promise.all(promises);
       results.push(...batchResults);
+      await new Promise(r => setTimeout(r, 200));
   }
   
   return results;

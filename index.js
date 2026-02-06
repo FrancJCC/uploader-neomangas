@@ -118,14 +118,13 @@ async function fetchDetailsForChapters(chapters) {
     if (!chapters || chapters.length === 0) return [];
     
     // Verificar si el primer capítulo ya tiene páginas. Si sí, asumimos que todos las tienen y retornamos.
-    // (A menos que haya mezcla, pero es raro. Optimizamos para el caso común).
     if (chapters[0].pages && Array.isArray(chapters[0].pages)) {
         return chapters;
     }
 
-    // console.log('   ℹ️  Listado sin páginas detectado. Obteniendo detalles individualmente...'.gray);
+    console.log('   ℹ️  Verificando estado de capítulos en servidor (Fetch Details)...'.cyan);
     
-    const BATCH_SIZE = 5; // Límite de concurrencia
+    const BATCH_SIZE = 3; // Reducido para evitar saturación
     const results = [];
     
     for (let i = 0; i < chapters.length; i += BATCH_SIZE) {
@@ -133,19 +132,29 @@ async function fetchDetailsForChapters(chapters) {
         const promises = batch.map(async (chapter) => {
             if (chapter.pages && Array.isArray(chapter.pages)) return chapter; // Ya tiene páginas
             
-            try {
-                // Fetch individual para obtener 'pages'
-                const detail = await axios.get(`${API_URL}/chapters/${chapter._id}`);
-                return detail.data;
-            } catch (e) {
-                // Si falla el detalle, devolvemos el original (asumiendo que quizás no tiene páginas o error)
-                // console.warn(`      ⚠️  No se pudo obtener detalle para Cap ${chapter.number}: ${e.message}`.gray);
-                return chapter;
+            // Reintentos simples
+            let attempts = 0;
+            while (attempts < 3) {
+                try {
+                    const detail = await axios.get(`${API_URL}/chapters/${chapter._id}`, { timeout: 10000 });
+                    return detail.data;
+                } catch (e) {
+                    attempts++;
+                    if (attempts >= 3) {
+                        console.warn(`      ⚠️  No se pudo verificar Cap ${chapter.number}: ${e.message}. Se asumirá incompleto.`.yellow);
+                        return chapter; // Original (sin páginas)
+                    }
+                    // Esperar un poco antes de reintentar
+                    await new Promise(r => setTimeout(r, 500 * attempts));
+                }
             }
         });
         
         const batchResults = await Promise.all(promises);
         results.push(...batchResults);
+        
+        // Pequeña pausa entre lotes
+        await new Promise(r => setTimeout(r, 200));
     }
     
     return results;
