@@ -56,7 +56,8 @@ async function getMangas() {
 
 async function getChaptersBySeries(seriesId) {
   try {
-    const res = await axios.get(`${API_URL}/chapters/series/${seriesId}?includePages=true`)
+    // OPTIMIZATION: Fetch light list first, then details
+    const res = await axios.get(`${API_URL}/chapters/series/${seriesId}`)
     const chapters = res.data
     return await fetchDetailsForChapters(chapters)
   } catch (e) {

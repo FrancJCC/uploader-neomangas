@@ -100,7 +100,9 @@ async function getMangas() {
 
 async function getSeriesChapters(seriesId) {
     try {
-        const response = await axios.get(`${API_URL}/chapters/series/${seriesId}?includePages=true`);
+        // OPTIMIZATION: No pedimos pages en el listado para evitar OOM en el backend.
+        // fetchDetailsForChapters se encargará de obtenerlas individualmente si faltan.
+        const response = await axios.get(`${API_URL}/chapters/series/${seriesId}`);
         const chapters = response.data;
         
         // WORKAROUND: Si el backend no devuelve las páginas en el listado (debido a un bug en el controller),
