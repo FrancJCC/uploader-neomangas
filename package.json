@@ -1,23 +1,32 @@
 {
-  "name": "neomangas-uploader",
-  "version": "1.0.0",
-  "description": "Bulk uploader for NeoMangas",
+  "name": "neomanga-tools",
+  "version": "2.0.0",
+  "description": "NeoManga Admin CLI - Upload, Verify, Repair",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "verify": "node verify_uploads.js",
-    "migrate:r2": "node migrate_to_r2.js",
-    "build": "pkg index.js --targets node18-win-x64 --output uploader.exe",
-    "build:verify": "pkg verify_uploads.js --targets node18-win-x64 --output verify.exe"
+    "build": "pkg index.js --targets node18-win-x64 --output neomanga-tools.exe --public"
+  },
+  "pkg": {
+    "assets": [
+      ".env"
+    ]
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.511.0",
-    "axios": "^0.27.2",
+    "@aws-sdk/lib-storage": "^3.511.0",
+    "bcryptjs": "^3.0.3",
     "colors": "^1.4.0",
     "dotenv": "^16.3.1",
-    "form-data": "^4.0.0",
+    "express": "^4.18.2",
     "fs-extra": "^11.1.1",
-    "inquirer": "^8.2.7"
+    "inquirer": "^8.2.7",
+    "mongoose": "^8.0.0",
+    "open": "^8.4.2",
+    "ora": "^5.4.1",
+    "sharp": "^0.32.6",
+    "socket.io": "^4.7.4",
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "pkg": "^5.8.1"
