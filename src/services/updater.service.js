@@ -8,7 +8,7 @@ const ora = require('ora');
 
 // URL por defecto donde se alojará el JSON de versión
 // El usuario debe configurar esto en su servidor/bucket
-const DEFAULT_UPDATE_URL = 'https://raw.githubusercontent.com/FrancJCC/neomanga-tools/main/version.json';
+const DEFAULT_UPDATE_URL = 'https://raw.githubusercontent.com/FrancJCC/uploader-neomangas/main/version.json';
 
 class UpdaterService {
     constructor() {

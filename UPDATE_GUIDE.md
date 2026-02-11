@@ -21,7 +21,7 @@ Súbelo a una URL pública (ej: GitHub Raw o tu backend).
 ```json
 {
   "version": "2.1.0",
-  "url": "https://tusitio.com/descargas/neomanga-tools.exe",
+  "url": "https://github.com/FrancJCC/uploader-neomangas/releases/download/v2.1.0/neomanga-tools.exe",
   "notes": "✨ Agregado soporte para auto-update y corrección de errores."
 }
 ```
