@@ -4,7 +4,7 @@ const { PutObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3')
 const { Upload } = require('@aws-sdk/lib-storage');
 const s3Client = require('../config/s3');
 const env = require('../config/env');
-const { getActiveBucket } = require('../config/storage'); // Multi-bucket
+const { getActiveBucket, setActiveBucket, BUCKETS } = require('../config/storage'); // Multi-bucket
 const Manga = require('../models/Manga');
 const Chapter = require('../models/Chapter');
 const logger = require('../utils/logger'); // New Logger
@@ -16,6 +16,13 @@ const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sen
 
 // Cache for approved folders to avoid repeated prompts in the same session
 const approvedFolders = new Set();
+
+// Helper to get next bucket
+function getNextBucket(currentBucket) {
+    if (currentBucket.id === 'PRIMARY') return BUCKETS.SECONDARY;
+    if (currentBucket.id === 'SECONDARY') return BUCKETS.TERTIARY;
+    return null; // No more buckets
+}
 
 // Escape regex special characters
 const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -95,8 +102,8 @@ async function processChapter(manga, chapterPath, chapterNum, options = {}) {
     logger.info(`   ⬆️ Subiendo Capítulo ${chapterNum} (${imageFiles.length} págs)...`.white);
 
     // 3. Configure Target Bucket & Client
-    const targetBucketConfig = getActiveBucket();
-    const client = s3Client.createS3Client(targetBucketConfig);
+    let targetBucketConfig = getActiveBucket();
+    let client = s3Client.createS3Client(targetBucketConfig);
     const safeTitle = manga.folderPath;
 
     if (!safeTitle) {
@@ -108,7 +115,7 @@ async function processChapter(manga, chapterPath, chapterNum, options = {}) {
     logger.info(`      📍 Destino: ${targetBucketConfig.name} | Ruta: ${safeTitle}/${safeChapter}/`.gray);
 
     // 4. Check Folder Existence (Safety Check)
-    const folderExists = await checkFolderExists(client, targetBucketConfig.name, safeTitle);
+    let folderExists = await checkFolderExists(client, targetBucketConfig.name, safeTitle);
     
     if (!folderExists && !approvedFolders.has(`${targetBucketConfig.name}:${safeTitle}`)) {
         logger.warn(`\n⚠️ La carpeta NO se detectó en el bucket: ${targetBucketConfig.name}`.yellow);
@@ -130,8 +137,6 @@ async function processChapter(manga, chapterPath, chapterNum, options = {}) {
         } else {
             logger.warn('⚠️ No se puede pedir confirmación (No TTY). Continuando bajo su riesgo...'.yellow);
         }
-    } else if (!folderExists) {
-        // If it didn't exist but is approved in cache, just proceed (it will be created by upload)
     }
 
     // 5. Upload to S3
@@ -140,34 +145,107 @@ async function processChapter(manga, chapterPath, chapterNum, options = {}) {
 
     for (let i = 0; i < imageFiles.length; i += concurrencyLimit) {
         const batch = imageFiles.slice(i, i + concurrencyLimit);
-        
-        // Process batch sequentially to ensure memory release
-        const batchResults = await Promise.allSettled(batch.map(async (filename) => {
-            const fullPath = path.join(chapterPath, filename);
-            const safeFilename = filename.replace(/[^a-zA-Z0-9\-_.]/g, '');
-            const key = `${safeTitle}/${safeChapter}/${safeFilename}`;
-            
-            // Retry logic
-            let retries = 3;
-            while (retries > 0) {
-                try {
-                    return await uploadFileToS3(fullPath, key, client, targetBucketConfig);
-                } catch (err) {
-                    retries--;
-                    if (retries === 0) throw err;
-                    await new Promise(res => setTimeout(res, 2000)); // Wait 2s
-                    logger.warn(`      ⚠️ Reintentando subida: ${filename}`);
+        let batchSuccess = false;
+
+        while (!batchSuccess) {
+            // Process batch sequentially to ensure memory release
+            const batchResults = await Promise.allSettled(batch.map(async (filename) => {
+                const fullPath = path.join(chapterPath, filename);
+                const safeFilename = filename.replace(/[^a-zA-Z0-9\-_.]/g, '');
+                const key = `${safeTitle}/${safeChapter}/${safeFilename}`;
+                
+                // Retry logic
+                let retries = 3;
+                while (retries > 0) {
+                    try {
+                        return await uploadFileToS3(fullPath, key, client, targetBucketConfig);
+                    } catch (err) {
+                        // Check for storage cap exceeded immediately
+                        if (err.message && (err.message.includes('storage cap exceeded') || err.message.includes('CapExceeded'))) {
+                            throw err; // Stop retrying, escalate to failover
+                        }
+                        retries--;
+                        if (retries === 0) throw err;
+                        await new Promise(res => setTimeout(res, 2000)); // Wait 2s
+                        logger.warn(`      ⚠️ Reintentando subida: ${filename}`);
+                    }
+                }
+            }));
+
+            // Check for critical errors (Storage Cap)
+            const capExceededError = batchResults.find(r => 
+                r.status === 'rejected' && 
+                r.reason && 
+                (r.reason.message.includes('storage cap exceeded') || r.reason.message.includes('CapExceeded'))
+            );
+
+            if (capExceededError) {
+                const nextBucket = getNextBucket(targetBucketConfig);
+                
+                if (!nextBucket) {
+                    logger.error('❌ Todos los buckets están llenos o no configurados.'.red);
+                    throw new Error('Storage cap exceeded on all buckets.');
+                }
+
+                logger.warn(`\n⚠️ ALERTA: Límite de almacenamiento excedido en ${targetBucketConfig.name}`.yellow);
+                logger.warn(`   Error: ${capExceededError.reason.message}`.gray);
+
+                if (process.stdout.isTTY) {
+                    const { confirmSwitch } = await inquirer.prompt([{
+                        type: 'confirm',
+                        name: 'confirmSwitch',
+                        message: `¿Desea cambiar al siguiente bucket (${nextBucket.name}) y continuar la subida?`,
+                        default: true
+                    }]);
+
+                    if (confirmSwitch) {
+                        logger.info(`🔄 Cambiando a bucket: ${nextBucket.name}`.cyan);
+                        
+                        // Switch Config GLOBALLY for future chapters
+                        setActiveBucket(nextBucket);
+
+                        // Switch Config locally for retry
+                        targetBucketConfig = nextBucket;
+                        client = s3Client.createS3Client(targetBucketConfig);
+
+                        // Verify Folder in New Bucket
+                        const folderExistsNew = await checkFolderExists(client, targetBucketConfig.name, safeTitle);
+                        if (!folderExistsNew && !approvedFolders.has(`${targetBucketConfig.name}:${safeTitle}`)) {
+                            const { confirmCreate } = await inquirer.prompt([{
+                                type: 'confirm',
+                                name: 'confirmCreate',
+                                message: `La carpeta no existe en ${nextBucket.name}. ¿Crearla/Usarla?`,
+                                default: true
+                            }]);
+                            
+                            if (confirmCreate) {
+                                approvedFolders.add(`${targetBucketConfig.name}:${safeTitle}`);
+                            } else {
+                                throw new Error('Cambio de bucket cancelado por falta de carpeta.');
+                            }
+                        }
+
+                        // Retry the SAME batch with the new bucket
+                        logger.info(`   Reintentando lote actual en ${targetBucketConfig.name}...`.white);
+                        continue; 
+                    } else {
+                        throw new Error('Subida cancelada por límite de almacenamiento.');
+                    }
+                } else {
+                    throw new Error('Storage cap exceeded (No TTY).');
                 }
             }
-        }));
 
-        // Handle results
-        for (const result of batchResults) {
-            if (result.status === 'fulfilled') {
-                uploadedUrls.push(result.value);
-            } else {
-                logger.error(`      ❌ Falló archivo: ${result.reason}`);
+            // Handle normal results (Success or Non-Critical Errors)
+            for (const result of batchResults) {
+                if (result.status === 'fulfilled') {
+                    uploadedUrls.push(result.value);
+                } else {
+                    logger.error(`      ❌ Falló archivo: ${result.reason}`);
+                }
             }
+
+            batchSuccess = true; // Exit while loop
         }
         
         if (global.gc) global.gc(); // Optional: Force GC if available

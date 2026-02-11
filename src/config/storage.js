@@ -30,17 +30,31 @@ const BUCKETS = {
     }
 };
 
+// Variable local para mantener el estado del bucket activo durante la ejecución
+let activeBucketOverride = null;
+
 function getActiveBucket() {
-    // Si hay una variable S3_BUCKET explícita en .env, buscamos ese bucket
+    // 1. Si hay un override en tiempo de ejecución (por failover), usarlo
+    if (activeBucketOverride) {
+        return activeBucketOverride;
+    }
+
+    // 2. Si hay una variable S3_BUCKET explícita en .env, buscamos ese bucket
     if (env.S3.BUCKET) {
         const found = Object.values(BUCKETS).find(b => b.name === env.S3.BUCKET);
         if (found) return found;
     }
-    // Si no, devolvemos el marcado como ACTIVE_WRITE
+    
+    // 3. Si no, devolvemos el marcado como ACTIVE_WRITE
     return Object.values(BUCKETS).find(b => b.role === 'ACTIVE_WRITE') || BUCKETS.PRIMARY;
+}
+
+function setActiveBucket(bucketConfig) {
+    activeBucketOverride = bucketConfig;
 }
 
 module.exports = {
     BUCKETS,
-    getActiveBucket
+    getActiveBucket,
+    setActiveBucket
 };

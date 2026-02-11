@@ -8,6 +8,7 @@ const { uploadSeries } = require('./src/services/upload.service');
 const { verifySeries } = require('./src/services/verify.service');
 const { repairSeries } = require('./src/services/repair.service');
 const { startServer } = require('./src/web/server'); // Web GUI
+const updaterService = require('./src/services/updater.service');
 
 // Disable deprecation warning for punycode
 process.noDeprecation = true;
@@ -59,6 +60,7 @@ async function mainMenu() {
                 |_____|                    |___/       
     `.cyan.bold);
     console.log(` v2.1.0 - GUI & CLI`.white.dim);
+    console.log(` 📂 Origen: ${env.CONTENT_DIR}`.gray);
     console.log('');
 
     const { action } = await inquirer.prompt([
@@ -68,6 +70,8 @@ async function mainMenu() {
             message: 'Selecciona modo:',
             choices: [
                 { name: 'Modo Gráfico (Web GUI)', value: 'gui' },
+                new inquirer.Separator(),
+                { name: '📂 Cambiar Carpeta de Origen', value: 'change_dir' },
                 new inquirer.Separator(),
                 { name: 'Subir TODO (Upload All)', value: 'upload_all' },
                 { name: 'Subir Serie Específica', value: 'upload_one' },
@@ -86,6 +90,9 @@ async function mainMenu() {
 }
 
 async function run() {
+    // Check for updates before anything else
+    await updaterService.promptAndRun();
+
     // Check arguments for auto-gui
     const args = process.argv.slice(2);
     if (args.includes('--gui') || args.includes('-g')) {
@@ -117,6 +124,23 @@ async function run() {
                 for (const s of series) {
                     await uploadSeries(s);
                 }
+            } else if (action === 'change_dir') {
+                const { newDir } = await inquirer.prompt([
+                    {
+                        type: 'input',
+                        name: 'newDir',
+                        message: 'Ingresa la nueva ruta absoluta de la carpeta de Mangas:',
+                        default: env.CONTENT_DIR,
+                        validate: (input) => {
+                            if (fs.existsSync(input) && fs.statSync(input).isDirectory()) {
+                                return true;
+                            }
+                            return 'La ruta no existe o no es un directorio válido.';
+                        }
+                    }
+                ]);
+                env.CONTENT_DIR = newDir;
+                console.log(`✅ Carpeta de origen actualizada a: ${env.CONTENT_DIR}`.green);
             } else if (action === 'upload_one') {
                 const s = await promptSeriesSelection();
                 if (s) await uploadSeries(s);
