@@ -703,7 +703,7 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         logger.removeListener('log', logHandler);
-        prompter.clearSocket();
+        prompter.clearSocket(socket);
     });
 
     // Commands

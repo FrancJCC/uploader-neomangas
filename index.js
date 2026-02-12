@@ -74,7 +74,7 @@ async function mainMenu() {
              ( ◣_◢ )
               > ^ <
     `.cyan.bold);
-    console.log(` v2.1.1 - GUI & CLI`.white.dim);
+    console.log(` v2.2.0 - GUI & CLI`.white.dim);
     console.log(` 📂 Origen: ${env.CONTENT_DIR}`.gray);
     console.log('');
 

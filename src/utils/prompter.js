@@ -5,11 +5,17 @@ let currentSocket = null;
 
 module.exports = {
     setSocket: (socket) => {
+        logger.info(`🔌 [Prompter] Socket conectado: ${socket.id}`);
         currentSocket = socket;
     },
 
-    clearSocket: () => {
-        currentSocket = null;
+    clearSocket: (socket) => {
+        if (currentSocket === socket) {
+            logger.info(`🔌 [Prompter] Socket desconectado y limpiado: ${socket.id}`);
+            currentSocket = null;
+        } else {
+            logger.info(`⚠️ [Prompter] Intento de limpiar socket diferente. Actual: ${currentSocket?.id}, A limpiar: ${socket.id}`);
+        }
     },
 
     /**
@@ -19,7 +25,7 @@ module.exports = {
     confirm: async (message, defaultValue = false) => {
         // 1. MODO WEB (Si hay un socket activo)
         if (currentSocket) {
-            logger.info(`❓ Esperando respuesta del usuario (Web): ${message}`);
+            logger.info(`❓ [Prompter] Enviando prompt a Web (Socket ${currentSocket.id}): ${message}`);
             
             return new Promise((resolve) => {
                 // Emitir evento al frontend
