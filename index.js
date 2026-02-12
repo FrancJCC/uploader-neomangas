@@ -8,7 +8,9 @@ const { uploadSeries } = require('./src/services/upload.service');
 const { verifySeries } = require('./src/services/verify.service');
 const { repairSeries } = require('./src/services/repair.service');
 const { startServer } = require('./src/web/server'); // Web GUI
-const updaterService = require('./src/services/updater.service');
+const path = require('path');
+const updater = require('./src/services/updater.service');
+const packageJson = require('./package.json');
 
 // Disable deprecation warning for punycode
 process.noDeprecation = true;
@@ -52,14 +54,27 @@ async function promptSeriesSelection() {
 async function mainMenu() {
     console.clear();
     console.log(`
-  _   _                 __  __                         
- | \\ | | ___  ___      |  \\/  | __ _ _ __   __ _  __ _ 
- |  \\| |/ _ \\/ _ \\     | |\\/| |/ _\` | '_ \\ / _\` |/ _\` |
- | |\\  |  __/ (_) |    | |  | | (_| | | | | (_| | (_| |
- |_| \\_|\\___|\\___/_____|_|  |_|\\__,_|_| |_|\\__, |\\__,_|
-                |_____|                    |___/       
+ ███╗   ██╗███████╗ ██████╗     ███╗   ███╗ █████╗ ███╗   ██╗ ██████╗  █████╗ ███████╗
+ ████╗  ██║██╔════╝██╔═══██╗    ████╗ ████║██╔══██╗████╗  ██║██╔════╝ ██╔══██╗██╔════╝
+ ██╔██╗ ██║█████╗  ██║   ██║    ██╔████╔██║███████║██╔██╗ ██║██║  ███╗███████║███████╗
+ ██║╚██╗██║██╔══╝  ██║   ██║    ██║╚██╔╝██║██╔══██║██║╚██╗██║██║   ██║██╔══██║╚════██║
+ ██║ ╚████║███████╗╚██████╔╝    ██║ ╚═╝ ██║██║  ██║██║ ╚████║╚██████╔╝██║  ██║███████║
+ ╚═╝  ╚═══╝╚══════╝ ╚═════╝     ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
+
+
     `.cyan.bold);
-    console.log(` v2.1.0 - GUI & CLI`.white.dim);
+        console.log(`
+ ██████╗ ███████╗███╗   ███╗ ██████╗ ███╗   ██╗██████╗ ██╗      █████╗  ██████╗██╗  ██╗
+ ██╔══██╗██╔════╝████╗ ████║██╔═══██╗████╗  ██║██╔══██╗██║     ██╔══██╗██╔════╝██║ ██╔╝
+ ██║  ██║█████╗  ██╔████╔██║██║   ██║██╔██╗ ██║██████╔╝██║     ███████║██║     █████╔╝ 
+ ██║  ██║██╔══╝  ██║╚██╔╝██║██║   ██║██║╚██╗██║██╔══██╗██║     ██╔══██║██║     ██╔═██╗ 
+ ██████╔╝███████╗██║ ╚═╝ ██║╚██████╔╝██║ ╚████║██████╔╝███████╗██║  ██║╚██████╗██║  ██╗
+ ╚═════╝ ╚══════╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
+              /\_/\ 
+             ( ◣_◢ )
+              > ^ <
+    `.cyan.bold);
+    console.log(` v2.1.1 - GUI & CLI`.white.dim);
     console.log(` 📂 Origen: ${env.CONTENT_DIR}`.gray);
     console.log('');
 
@@ -71,7 +86,7 @@ async function mainMenu() {
             choices: [
                 { name: 'Modo Gráfico (Web GUI)', value: 'gui' },
                 new inquirer.Separator(),
-                { name: '📂 Cambiar Carpeta de Origen', value: 'change_dir' },
+                { name: 'Cambiar Carpeta de Origen', value: 'change_dir' },
                 new inquirer.Separator(),
                 { name: 'Subir TODO (Upload All)', value: 'upload_all' },
                 { name: 'Subir Serie Específica', value: 'upload_one' },
@@ -91,7 +106,11 @@ async function mainMenu() {
 
 async function run() {
     // Check for updates before anything else
-    await updaterService.promptAndRun();
+    try {
+        await updater.promptAndRun();
+    } catch (e) {
+        // Ignore update errors
+    }
 
     // Check arguments for auto-gui
     const args = process.argv.slice(2);
