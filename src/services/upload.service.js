@@ -9,7 +9,7 @@ const Manga = require('../models/Manga');
 const Chapter = require('../models/Chapter');
 const logger = require('../utils/logger'); // New Logger
 const colors = require('colors');
-const inquirer = require('inquirer');
+const prompter = require('../utils/prompter'); // Wrapper para Inquirer/Socket
 const mongoose = require('mongoose');
 
 const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
@@ -86,7 +86,18 @@ async function processChapter(manga, chapterPath, chapterNum, options = {}) {
     let chapter = await Chapter.findOne({ seriesId: manga._id, number: chapterNum });
     
     if (chapter && chapter.pages && chapter.pages.length > 0 && !force) {
-        return { status: 'skipped', reason: 'exists', updated: false };
+        logger.warn(`⚠️ El capítulo ${chapterNum} ya existe en la base de datos con ${chapter.pages.length} páginas.`.yellow);
+        
+        const shouldOverwrite = await prompter.confirm(
+            `El capítulo ${chapterNum} ya existe. ¿Desea sobrescribirlo?`,
+            false
+        );
+
+        if (!shouldOverwrite) {
+            return { status: 'skipped', reason: 'exists', updated: false };
+        }
+        
+        logger.info(`🔄 Sobrescribiendo capítulo ${chapterNum}...`.cyan);
     }
 
     // 2. Read Local Files
@@ -117,27 +128,23 @@ async function processChapter(manga, chapterPath, chapterNum, options = {}) {
     // 4. Check Folder Existence (Safety Check)
     let folderExists = await checkFolderExists(client, targetBucketConfig.name, safeTitle);
     
-    if (!folderExists && !approvedFolders.has(`${targetBucketConfig.name}:${safeTitle}`)) {
-        logger.warn(`\n⚠️ La carpeta NO se detectó en el bucket: ${targetBucketConfig.name}`.yellow);
-        logger.warn(`   Ruta buscada: ${safeTitle}/`.yellow);
-        
-        if (process.stdout.isTTY) {
-            const { confirm } = await inquirer.prompt([{
-                type: 'confirm',
-                name: 'confirm',
-                message: `¿Desea CREAR (o usar si ya existe) esta carpeta en el bucket '${targetBucketConfig.name}'?`,
-                default: false
-            }]);
+    if (folderExists) {
+             // Folder exists, all good
+        } else if (!approvedFolders.has(`${targetBucketConfig.name}:${safeTitle}`)) {
+            logger.warn(`\n⚠️ La carpeta NO se detectó en el bucket: ${targetBucketConfig.name}`.yellow);
+            logger.warn(`   Ruta buscada: ${safeTitle}/`.yellow);
+            
+            const confirm = await prompter.confirm(
+                `¿Desea CREAR (o usar si ya existe) esta carpeta en el bucket '${targetBucketConfig.name}'?`,
+                false
+            );
             
             if (!confirm) {
                 logger.error('❌ Subida cancelada por el usuario.'.red);
                 throw new Error('Subida cancelada por el usuario.');
             }
             approvedFolders.add(`${targetBucketConfig.name}:${safeTitle}`);
-        } else {
-            logger.warn('⚠️ No se puede pedir confirmación (No TTY). Continuando bajo su riesgo...'.yellow);
         }
-    }
 
     // 5. Upload to S3
     const uploadedUrls = [];
@@ -190,49 +197,41 @@ async function processChapter(manga, chapterPath, chapterNum, options = {}) {
                 logger.warn(`\n⚠️ ALERTA: Límite de almacenamiento excedido en ${targetBucketConfig.name}`.yellow);
                 logger.warn(`   Error: ${capExceededError.reason.message}`.gray);
 
-                if (process.stdout.isTTY) {
-                    const { confirmSwitch } = await inquirer.prompt([{
-                        type: 'confirm',
-                        name: 'confirmSwitch',
-                        message: `¿Desea cambiar al siguiente bucket (${nextBucket.name}) y continuar la subida?`,
-                        default: true
-                    }]);
+                const confirmSwitch = await prompter.confirm(
+                    `¿Desea cambiar al siguiente bucket (${nextBucket.name}) y continuar la subida?`,
+                    true
+                );
 
-                    if (confirmSwitch) {
-                        logger.info(`🔄 Cambiando a bucket: ${nextBucket.name}`.cyan);
+                if (confirmSwitch) {
+                    logger.info(`🔄 Cambiando a bucket: ${nextBucket.name}`.cyan);
+                    
+                    // Switch Config GLOBALLY for future chapters
+                    setActiveBucket(nextBucket);
+
+                    // Switch Config locally for retry
+                    targetBucketConfig = nextBucket;
+                    client = s3Client.createS3Client(targetBucketConfig);
+
+                    // Verify Folder in New Bucket
+                    const folderExistsNew = await checkFolderExists(client, targetBucketConfig.name, safeTitle);
+                    if (!folderExistsNew && !approvedFolders.has(`${targetBucketConfig.name}:${safeTitle}`)) {
+                        const confirmCreate = await prompter.confirm(
+                            `La carpeta no existe en ${nextBucket.name}. ¿Crearla/Usarla?`,
+                            true
+                        );
                         
-                        // Switch Config GLOBALLY for future chapters
-                        setActiveBucket(nextBucket);
-
-                        // Switch Config locally for retry
-                        targetBucketConfig = nextBucket;
-                        client = s3Client.createS3Client(targetBucketConfig);
-
-                        // Verify Folder in New Bucket
-                        const folderExistsNew = await checkFolderExists(client, targetBucketConfig.name, safeTitle);
-                        if (!folderExistsNew && !approvedFolders.has(`${targetBucketConfig.name}:${safeTitle}`)) {
-                            const { confirmCreate } = await inquirer.prompt([{
-                                type: 'confirm',
-                                name: 'confirmCreate',
-                                message: `La carpeta no existe en ${nextBucket.name}. ¿Crearla/Usarla?`,
-                                default: true
-                            }]);
-                            
-                            if (confirmCreate) {
-                                approvedFolders.add(`${targetBucketConfig.name}:${safeTitle}`);
-                            } else {
-                                throw new Error('Cambio de bucket cancelado por falta de carpeta.');
-                            }
+                        if (confirmCreate) {
+                            approvedFolders.add(`${targetBucketConfig.name}:${safeTitle}`);
+                        } else {
+                            throw new Error('Cambio de bucket cancelado por falta de carpeta.');
                         }
-
-                        // Retry the SAME batch with the new bucket
-                        logger.info(`   Reintentando lote actual en ${targetBucketConfig.name}...`.white);
-                        continue; 
-                    } else {
-                        throw new Error('Subida cancelada por límite de almacenamiento.');
                     }
+
+                    // Retry the SAME batch with the new bucket
+                    logger.info(`   Reintentando lote actual en ${targetBucketConfig.name}...`.white);
+                    continue; 
                 } else {
-                    throw new Error('Storage cap exceeded (No TTY).');
+                    throw new Error('Subida cancelada por límite de almacenamiento.');
                 }
             }
 

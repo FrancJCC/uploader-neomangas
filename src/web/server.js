@@ -16,6 +16,7 @@ const socketIoLib = require('./socket-lib'); // Inlined Socket.IO Client
 const { uploadSeries } = require('../services/upload.service');
 const { verifySeries } = require('../services/verify.service');
 const { repairSeries } = require('../services/repair.service');
+const prompter = require('../utils/prompter'); // Nuevo prompter
 
 const app = express();
 const server = http.createServer(app);
@@ -222,9 +223,52 @@ const HTML_CONTENT = `
         .log-warn { color: #cca700; }
         .log-title { color: #569cd6; font-weight: bold; margin-top: 10px; border-bottom: 1px solid #333; padding-bottom: 5px; }
 
+        /* Confirm Modal */
+        #confirm-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-box {
+            background-color: var(--sidebar-color);
+            padding: 25px;
+            border-radius: 8px;
+            width: 400px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            border: 1px solid #444;
+        }
+        .modal-msg {
+            color: #fff;
+            font-size: 1.1em;
+            margin-bottom: 25px;
+        }
+        .modal-btns {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        .btn-yes { background-color: #007acc; }
+        .btn-no { background-color: #444; }
+
     </style>
 </head>
 <body>
+
+    <!-- CONFIRM MODAL -->
+    <div id="confirm-modal">
+        <div class="modal-box">
+            <div id="confirm-msg" class="modal-msg">¿Estás seguro?</div>
+            <div class="modal-btns">
+                <button class="btn-no" onclick="resolveConfirm(false)">Cancelar (No)</button>
+                <button class="btn-yes" onclick="resolveConfirm(true)">Confirmar (Sí)</button>
+            </div>
+        </div>
+    </div>
 
     <!-- LOGIN SCREEN -->
     <div id="login-screen">
@@ -429,6 +473,11 @@ const HTML_CONTENT = `
                 actionBtn.disabled = isRunning;
                 select.disabled = isRunning;
             });
+
+            // Listen for input requests
+            socket.on('request-confirm', (data) => {
+                showConfirm(data.message);
+            });
         }
 
         function setMode(mode) {
@@ -463,6 +512,20 @@ const HTML_CONTENT = `
             if (currentMode === 'upload') socket.emit('start-upload', { series });
             if (currentMode === 'verify') socket.emit('start-verify', { series });
             if (currentMode === 'repair') socket.emit('start-repair', { series });
+        }
+
+        // --- CONFIRMATION MODAL LOGIC ---
+        function showConfirm(msg) {
+            document.getElementById('confirm-msg').textContent = msg;
+            document.getElementById('confirm-modal').style.display = 'flex';
+        }
+
+        function resolveConfirm(result) {
+            document.getElementById('confirm-modal').style.display = 'none';
+            if (socket) {
+                socket.emit('resolve-confirm', { result });
+                log(result ? '✅ Confirmado por usuario' : '❌ Cancelado por usuario', result ? 'success' : 'error');
+            }
         }
 
         function log(msg, type = 'info') {
@@ -628,6 +691,9 @@ app.get('/api/series', async (req, res) => {
 // Socket.IO Events
 io.on('connection', (socket) => {
     // console.log('Web Client Connected');
+    
+    // Registrar este socket como el activo para prompts
+    prompter.setSocket(socket);
 
     // Subscribe to logger events
     const logHandler = (data) => {
@@ -637,6 +703,7 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         logger.removeListener('log', logHandler);
+        prompter.clearSocket();
     });
 
     // Commands
