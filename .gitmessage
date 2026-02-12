@@ -1,0 +1,8 @@
+feat: Release v2.3.0 - Smart Upload & Bulk Actions
+
+- Feat: Added "Yes to All" and "No to All" buttons in Web GUI.
+- Feat: Implemented Smart Upload Check:
+  - Automatically skips fully synced chapters (DB pages == Local files).
+  - Prompts user only when page count mismatch is detected.
+- Fix: Auto-reset confirmation state on new process start.
+- Chore: Updated version to 2.3.0.

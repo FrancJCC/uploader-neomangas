@@ -1,5 +1,5 @@
 {
-  "version": "2.2.1",
-  "url": "https://github.com/FrancJCC/uploader-neomangas/releases/download/v2.2.1/neomanga-tools.exe",
-  "notes": "Fix crítico: Solución a bucle de actualización fallida en Windows."
+  "version": "2.3.0",
+  "url": "https://github.com/FrancJCC/uploader-neomangas/releases/download/v2.3.0/neomanga-tools.exe",
+  "notes": "Nuevo: Botones 'Sí a todo'/'No a todo'. Subida inteligente: Salta caps sincronizados y detecta discrepancias."
 }

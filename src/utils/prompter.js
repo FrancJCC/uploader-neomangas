@@ -2,6 +2,7 @@ const inquirer = require('inquirer');
 const logger = require('./logger');
 
 let currentSocket = null;
+let autoAction = null; // null | true (yes_all) | false (no_all)
 
 module.exports = {
     setSocket: (socket) => {
@@ -18,11 +19,22 @@ module.exports = {
         }
     },
 
+    reset: () => {
+        autoAction = null;
+        logger.info('🔄 [Prompter] Estado de respuestas automáticas reseteado.');
+    },
+
     /**
      * Pide una confirmación (Sí/No).
      * Funciona tanto en CLI (Inquirer) como en Web (Socket.IO).
      */
     confirm: async (message, defaultValue = false) => {
+        // 0. CHECK AUTO-ACTION
+        if (autoAction !== null) {
+            logger.info(`🤖 [Prompter] Respuesta automática aplicada (${autoAction ? 'SÍ' : 'NO'} a todo): ${message}`);
+            return autoAction;
+        }
+
         // 1. MODO WEB (Si hay un socket activo)
         if (currentSocket) {
             logger.info(`❓ [Prompter] Enviando prompt a Web (Socket ${currentSocket.id}): ${message}`);
@@ -36,7 +48,19 @@ module.exports = {
 
                 // Escuchar respuesta (una sola vez)
                 const listener = (data) => {
-                    resolve(!!data.result); // Asegurar booleano
+                    const { result } = data;
+
+                    // Manejo de "Sí a todo" / "No a todo"
+                    if (result === 'yes_all') {
+                        autoAction = true;
+                        resolve(true);
+                    } else if (result === 'no_all') {
+                        autoAction = false;
+                        resolve(false);
+                    } else {
+                        // Respuesta normal (true/false)
+                        resolve(!!result);
+                    }
                 };
 
                 // Importante: Usar .once para evitar listeners acumulados

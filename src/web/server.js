@@ -237,7 +237,7 @@ const HTML_CONTENT = `
             background-color: var(--sidebar-color);
             padding: 25px;
             border-radius: 8px;
-            width: 400px;
+            width: 500px; /* Ancho aumentado para acomodar más botones */
             text-align: center;
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
             border: 1px solid #444;
@@ -251,9 +251,12 @@ const HTML_CONTENT = `
             display: flex;
             gap: 10px;
             justify-content: center;
+            flex-wrap: wrap; /* Permitir salto de línea si es necesario */
         }
         .btn-yes { background-color: #007acc; }
         .btn-no { background-color: #444; }
+        .btn-yes-all { background-color: #009900; } /* Verde para Sí a Todo */
+        .btn-no-all { background-color: #cc0000; } /* Rojo para No a Todo */
 
     </style>
 </head>
@@ -264,8 +267,10 @@ const HTML_CONTENT = `
         <div class="modal-box">
             <div id="confirm-msg" class="modal-msg">¿Estás seguro?</div>
             <div class="modal-btns">
-                <button class="btn-no" onclick="resolveConfirm(false)">Cancelar (No)</button>
-                <button class="btn-yes" onclick="resolveConfirm(true)">Confirmar (Sí)</button>
+                <button class="btn-yes-all" onclick="resolveConfirm('yes_all')">Sí a Todo</button>
+                <button class="btn-yes" onclick="resolveConfirm(true)">Sí (Solo este)</button>
+                <button class="btn-no" onclick="resolveConfirm(false)">No (Solo este)</button>
+                <button class="btn-no-all" onclick="resolveConfirm('no_all')">No a Todo</button>
             </div>
         </div>
     </div>
@@ -524,7 +529,17 @@ const HTML_CONTENT = `
             document.getElementById('confirm-modal').style.display = 'none';
             if (socket) {
                 socket.emit('resolve-confirm', { result });
-                log(result ? '✅ Confirmado por usuario' : '❌ Cancelado por usuario', result ? 'success' : 'error');
+                
+                // Visual feedback in terminal
+                let text = '';
+                let type = 'info';
+                
+                if (result === true) { text = '✅ Confirmado (Solo este)'; type = 'success'; }
+                else if (result === false) { text = '❌ Cancelado (Solo este)'; type = 'error'; }
+                else if (result === 'yes_all') { text = '✅✅ Confirmado a TODO'; type = 'success'; }
+                else if (result === 'no_all') { text = '❌❌ Cancelado a TODO'; type = 'error'; }
+                
+                log(text, type);
             }
         }
 
@@ -708,6 +723,7 @@ io.on('connection', (socket) => {
 
     // Commands
     socket.on('start-upload', async ({ series }) => {
+        prompter.reset(); // Resetear respuestas automáticas al inicio
         socket.emit('status', { running: true });
         try {
             if (series === 'ALL') {
@@ -728,6 +744,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('start-verify', async ({ series }) => {
+        prompter.reset(); // Resetear respuestas automáticas al inicio
         socket.emit('status', { running: true });
         try {
             if (series === 'ALL') {
@@ -748,6 +765,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('start-repair', async ({ series }) => {
+        prompter.reset(); // Resetear respuestas automáticas al inicio
         socket.emit('status', { running: true });
         try {
             await repairSeries(series);

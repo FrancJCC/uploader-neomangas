@@ -82,25 +82,7 @@ async function uploadFileToS3(filePath, key, client, bucketConfig) {
 async function processChapter(manga, chapterPath, chapterNum, options = {}) {
     const { force = false } = options;
     
-    // 1. Check DB
-    let chapter = await Chapter.findOne({ seriesId: manga._id, number: chapterNum });
-    
-    if (chapter && chapter.pages && chapter.pages.length > 0 && !force) {
-        logger.warn(`⚠️ El capítulo ${chapterNum} ya existe en la base de datos con ${chapter.pages.length} páginas.`.yellow);
-        
-        const shouldOverwrite = await prompter.confirm(
-            `El capítulo ${chapterNum} ya existe. ¿Desea sobrescribirlo?`,
-            false
-        );
-
-        if (!shouldOverwrite) {
-            return { status: 'skipped', reason: 'exists', updated: false };
-        }
-        
-        logger.info(`🔄 Sobrescribiendo capítulo ${chapterNum}...`.cyan);
-    }
-
-    // 2. Read Local Files
+    // 1. Read Local Files FIRST
     const files = await fs.readdir(chapterPath);
     const imageFiles = files
         .filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f))
@@ -108,6 +90,34 @@ async function processChapter(manga, chapterPath, chapterNum, options = {}) {
 
     if (imageFiles.length === 0) {
         return { status: 'skipped', reason: 'empty_local', updated: false };
+    }
+
+    // 2. Check DB
+    let chapter = await Chapter.findOne({ seriesId: manga._id, number: chapterNum });
+    
+    if (chapter && chapter.pages && chapter.pages.length > 0 && !force) {
+        const dbLen = chapter.pages.length;
+        const localLen = imageFiles.length;
+
+        // EXACT MATCH: Skip automatically
+        if (dbLen === localLen) {
+             logger.info(`⏭️ Capítulo ${chapterNum} completo y sincronizado (${dbLen} págs). Saltando.`.gray);
+             return { status: 'skipped', reason: 'already_synced', updated: false };
+        }
+        
+        // MISMATCH: Prompt user
+        logger.warn(`⚠️ Diferencia en Capítulo ${chapterNum}: BD=${dbLen} vs Local=${localLen}`.yellow);
+        
+        const shouldOverwrite = await prompter.confirm(
+            `El capítulo ${chapterNum} difiere (BD: ${dbLen}, Local: ${localLen}). ¿Actualizar?`,
+            true // Default true usually implies we want to fix it
+        );
+
+        if (!shouldOverwrite) {
+            return { status: 'skipped', reason: 'user_skipped_diff', updated: false };
+        }
+        
+        logger.info(`🔄 Actualizando capítulo ${chapterNum}...`.cyan);
     }
 
     logger.info(`   ⬆️ Subiendo Capítulo ${chapterNum} (${imageFiles.length} págs)...`.white);
