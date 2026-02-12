@@ -1,5 +1,5 @@
 {
-  "version": "2.2.0",
-  "url": "https://github.com/FrancJCC/uploader-neomangas/releases/download/v2.2.0/neomanga-tools.exe",
-  "notes": "Corrección de prompts en interfaz Web y mejoras de estabilidad."
+  "version": "2.2.1",
+  "url": "https://github.com/FrancJCC/uploader-neomangas/releases/download/v2.2.1/neomanga-tools.exe",
+  "notes": "Fix crítico: Solución a bucle de actualización fallida en Windows."
 }

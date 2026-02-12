@@ -85,11 +85,29 @@ class UpdaterService {
         const batPath = path.join(currentDir, 'update.bat');
         const batContent = `
 @echo off
-echo Actualizando NeoManga Tools...
-timeout /t 2 /nobreak > NUL
-del "${exeName}"
-move "${path.basename(newFilePath)}" "${exeName}"
-start "" "${exeName}"
+title Actualizando NeoManga Tools...
+echo Esperando cierre de la aplicacion...
+
+:DELETE_LOOP
+timeout /t 1 /nobreak >nul
+del "${exeName}" >nul 2>&1
+if exist "${exeName}" (
+    echo Archivo bloqueado, reintentando...
+    goto DELETE_LOOP
+)
+
+echo Archivo anterior eliminado. Aplicando nueva version...
+move /Y "${path.basename(newFilePath)}" "${exeName}" >nul
+
+if exist "${exeName}" (
+    echo Actualizacion exitosa. Iniciando...
+    start "" "${exeName}"
+) else (
+    echo Error critico: No se pudo mover el nuevo archivo.
+    echo Por favor descarga la actualizacion manualmente.
+    pause
+)
+
 del "%~f0" & exit
 `;
         
