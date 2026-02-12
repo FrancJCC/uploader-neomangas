@@ -1,8 +1,4 @@
-feat: Release v2.3.0 - Smart Upload & Bulk Actions
+feat: Update logo to v2.3.0
 
-- Feat: Added "Yes to All" and "No to All" buttons in Web GUI.
-- Feat: Implemented Smart Upload Check:
-  - Automatically skips fully synced chapters (DB pages == Local files).
-  - Prompts user only when page count mismatch is detected.
-- Fix: Auto-reset confirmation state on new process start.
-- Chore: Updated version to 2.3.0.
+- Feat: Integrated 'neomangas.png' as embedded base64 logo in Web UI.
+- Chore: Rebuilt executable v2.3.0.

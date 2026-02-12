@@ -22,10 +22,22 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+const LOGO_BASE64 = `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAYAAAB/HSuDAAFb3WNhQlgAAVvdanVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAANvRqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjY0YjYwNTEzLWEwOTgtNDEyZi05OWRjLTQ5MTdmMGJmMDNjZAAAAAHBanVtYgAAAClqdW1kYzJhcwARABCAAACqADibcQNjMnBhLmFzc2VydGlvbnMAAAAA5Wp1bWIAAAApanVtZGNib3IAEQAQgAAAqgA4m3EDYzJwYS5hY3Rpb25zLnYyAAAAALRjYm9yoWdhY3Rpb25zgqNmYWN0aW9ubGMycGEuY3JlYXRlZG1zb2Z0d2FyZUFnZW50v2RuYW1lZkdQVC00b/9xZGlnaXRhbFNvdXJjZVR5cGV4Rmh0dHA6Ly9jdi5pcHRjLm9yZy9uZXdzY29kZXMvZGlnaXRhbHNvdXJjZXR5cGUvdHJhaW5lZEFsZ29yaXRobWljTWVkaWGhZmFjdGlvbm5jMnBhLmNvbnZlcnRlZAAAAKtqdW1iAAAAKGp1bWRjYm9yABEAEIAAAKoAOJtxA2MycGEuaGFzaC5kYXRhAAAAAHtjYm9ypWpleGNsdXNpb25zgaJlc3RhcnQYIWZsZW5ndGgZNyZkbmFtZW5qdW1iZiBtYW5pZmVzdGNhbGdmc2hhMjU2ZGhhc2hYIGsKxF60dFmFhWa13YgkYtk9y+a4pmoTsY8yfznedC+eY3BhZEgAAAAAAAAAAAAAAe1qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAABvmNib3Kmamluc3RhbmNlSUR4LHhtcDppaWQ6NzA2YmQ2ZDAtNWY2MS00M2EyLTljNzgtZmZhYzhhZjUzMzc4dGNsYWltX2dlbmVyYXRvcl9pbmZvv2RuYW1lZ0NoYXRHUFR3b3JnLmNvbnRlbnRhdXRoLmMycGFfcnNlMC4wLjD/aXNpZ25hdHVyZXhNc2VsZiNqdW1iZj0vYzJwYS91cm46YzJwYTo2NGI2MDUxMy1hMDk4LTQxMmYtOTlkYy00OTE3ZjBiZjAzY2QvYzJwYS5zaWduYXR1cmVyY3JlYXRlZF9hc3NlcnRpb25zgqJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggj06jKi2a0YnaYj1JQTJA/fXaKbmaViQasY2WYTITPLWiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFgg+jzmgg+j5ykvGfRC6llLoThJTmHmgOrfBy4yIUc/FIxoZGM6dGl0bGVpaW1hZ2UucG5nY2FsZ2ZzaGEyNTYAADL3anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAADLHY2JvctKEWQe7ogEmGCGCWQMxMIIDLTCCAhWgAwIBAgIUbCmjc/vcwda7SPw0ul76QATgxEYwDQYJKoZIhvcNAQEMBQAwSjEaMBgGA1UEAwwRV2ViQ2xhaW1TaWduaW5nQ0ExDTALBgNVBAsMBExlbnMxEDAOBgNVBAoMB1RydWVwaWMxCzAJBgNVBAYTAlVTMB4XDTI1MDQxNTE1MDkwNVoXDTI2MDQxNTE1MDkwNFowUDELMAkGA1UEBhMCVVMxDzANBgNVBAoMBk9wZW5BSTENMAsGA1UECwwEU29yYTEhMB8GA1UEAwwYVHJ1ZXBpYyBMZW5zIENMSSBpbiBTb3JhMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE99x9KFDrnDl5JjOyneajvSvP2jgNoEJ7MZ7l/qHZqpJrTOWhsephWFSHhxsxHLbGUXcl6g6GRb4CrjR3taBL`;
+
 // Serve Socket.IO Client Library explicitly (Fixes pkg/injection issues)
 app.get('/socket-lib.js', (req, res) => {
     res.type('application/javascript');
     res.send(socketIoLib);
+});
+
+// Serve Logo explicitly
+app.get('/logo.png', (req, res) => {
+    const img = Buffer.from(LOGO_BASE64.split(',')[1], 'base64');
+    res.writeHead(200, {
+        'Content-Type': 'image/png',
+        'Content-Length': img.length
+    });
+    res.end(img);
 });
 
 // INLINED HTML CONTENT (To avoid pkg file system issues)
@@ -128,6 +140,11 @@ const HTML_CONTENT = `
             display: flex;
             align-items: center;
             gap: 10px;
+        }
+        .logo img {
+            max-width: 40px;
+            height: auto;
+            border-radius: 4px;
         }
         .nav-btn {
             background: none;
@@ -289,7 +306,10 @@ const HTML_CONTENT = `
     <!-- APP LAYOUT -->
     <div id="app-layout" style="display: none;">
         <div class="sidebar">
-            <div class="logo">🚀 NeoManga</div>
+            <div class="logo">
+                <img src="/logo.png" alt="Logo">
+                <span>NeoManga</span>
+            </div>
             <button class="nav-btn active" onclick="setMode('upload')">☁️ Upload</button>
             <button class="nav-btn" onclick="setMode('verify')">🔍 Verificar</button>
             <button class="nav-btn" onclick="setMode('repair')">🔧 Reparar</button>
