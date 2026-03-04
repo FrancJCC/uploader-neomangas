@@ -60,10 +60,6 @@ async function mainMenu() {
  ██║╚██╗██║██╔══╝  ██║   ██║    ██║╚██╔╝██║██╔══██║██║╚██╗██║██║   ██║██╔══██║╚════██║
  ██║ ╚████║███████╗╚██████╔╝    ██║ ╚═╝ ██║██║  ██║██║ ╚████║╚██████╔╝██║  ██║███████║
  ╚═╝  ╚═══╝╚══════╝ ╚═════╝     ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
-
-
-    `.cyan.bold);
-        console.log(`
  ██████╗ ███████╗███╗   ███╗ ██████╗ ███╗   ██╗██████╗ ██╗      █████╗  ██████╗██╗  ██╗
  ██╔══██╗██╔════╝████╗ ████║██╔═══██╗████╗  ██║██╔══██╗██║     ██╔══██╗██╔════╝██║ ██╔╝
  ██║  ██║█████╗  ██╔████╔██║██║   ██║██╔██╗ ██║██████╔╝██║     ███████║██║     █████╔╝ 
@@ -74,7 +70,7 @@ async function mainMenu() {
              ( ◣_◢ )
               > ^ <
     `.cyan.bold);
-    console.log(` v2.3.0 - GUI & CLI`.white.dim);
+    console.log(` v2.3.3 - GUI & CLI`.white.dim);
     console.log(` 📂 Origen: ${env.CONTENT_DIR}`.gray);
     console.log('');
 
@@ -85,7 +81,7 @@ async function mainMenu() {
             message: 'Selecciona modo:',
             choices: [
                 { name: 'Modo Gráfico (Web GUI)', value: 'gui' },
-                new inquirer.Separator(),
+                /*new inquirer.Separator(),
                 { name: 'Cambiar Carpeta de Origen', value: 'change_dir' },
                 new inquirer.Separator(),
                 { name: 'Subir TODO (Upload All)', value: 'upload_all' },
@@ -95,7 +91,7 @@ async function mainMenu() {
                 { name: 'Verificar Serie Específica', value: 'verify_one' },
                 new inquirer.Separator(),
                 { name: 'Reparar Serie Específica', value: 'repair_one' },
-                new inquirer.Separator(),
+                new inquirer.Separator(),*/
                 { name: 'Salir', value: 'exit' }
             ]
         }

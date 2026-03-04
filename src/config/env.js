@@ -72,7 +72,7 @@ if (dbUser && dbPass) {
     }
 }
 
-module.exports = {
+const config = {
     MONGO_URI: mongoUri,
     CONTENT_DIR: process.env.CONTENT_DIR || 'E:\\NeoManga\\downloader\\downloads',
     S3: {
@@ -101,5 +101,17 @@ module.exports = {
                 SECRET: process.env.NEOMANGAS3_SECRET || process.env.S3_SECRET_KEY
             }
         }
+    },
+    
+    // Método para actualizar dinámicamente (solo en memoria)
+    updateContentDir: (newPath) => {
+        if (newPath && typeof newPath === 'string') {
+            config.CONTENT_DIR = newPath;
+            console.log(`📁 [Config] Carpeta de contenido actualizada a: ${newPath}`.cyan);
+            return true;
+        }
+        return false;
     }
 };
+
+module.exports = config;

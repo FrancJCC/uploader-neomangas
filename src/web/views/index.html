@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeoManga Tools</title>
+    <link rel="stylesheet" href="/public/css/style.css">
+</head>
+<body>
+
+    <!-- CONFIRM MODAL -->
+    <div id="confirm-modal" class="fade-in">
+        <div class="modal-box">
+            <div id="confirm-msg" class="modal-msg">¿Proceder con la acción solicitada?</div>
+            <div class="modal-btns">
+                <button class="btn-yes" onclick="resolveConfirm(true)">✅ Sí, continuar</button>
+                <button class="btn-no" onclick="resolveConfirm(false)">❌ No por ahora</button>
+                <button class="btn-yes-all" onclick="resolveConfirm('yes_all')">⚡ Confirmar para TODO</button>
+                <button class="btn-no-all" onclick="resolveConfirm('no_all')">🛑 Cancelar TODO</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen">
+        <div class="login-box fade-in">
+            <h2 style="background: none; -webkit-text-fill-color: #fff;">NeoManga</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px; font-weight: 500;">Tools & Management Suite</p>
+            <input type="email" id="email" class="login-input" placeholder="Correo electrónico" required>
+            <input type="password" id="password" class="login-input" placeholder="Contraseña" required>
+            <button class="login-btn" onclick="login()">Acceder al Sistema</button>
+            <div id="login-error" class="error-msg" style="color: var(--error-color); margin-top: 15px; font-weight: 700; font-size: 0.9rem; display: none;">Error: Credenciales no válidas</div>
+        </div>
+    </div>
+
+    <!-- APP LAYOUT -->
+    <div id="app-layout">
+        <div class="sidebar">
+            <div class="logo">
+                <img src="/public/logo-header.png" alt="Logo">
+            </div>
+            
+            <nav>
+                <button class="nav-btn active" onclick="setMode('upload')">
+                    <span style="font-size: 1.4rem;">☁️</span> Upload Center
+                </button>
+                <button class="nav-btn" onclick="setMode('verify')">
+                    <span style="font-size: 1.4rem;">🔍</span> Verificación
+                </button>
+                <button class="nav-btn" onclick="setMode('repair')">
+                    <span style="font-size: 1.4rem;">🔧</span> Reparación
+                </button>
+            </nav>
+            
+            <div class="config-section">
+                <span class="config-label">Ruta de Origen</span>
+                <span class="config-value" id="current-folder">Cargando directorio...</span>
+                <button class="btn-small" id="change-folder-btn" onclick="promptChangeFolder()">Cambiar Directorio</button>
+            </div>
+            
+            <div class="user-info">
+                <div>
+                    <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">Sesión de</div>
+                    <div id="user-display" style="font-weight: 800; color: #fff;">Usuario</div>
+                </div>
+                <button onclick="logout()" style="background:rgba(239, 68, 68, 0.1); border:none; color:var(--error-color); cursor:pointer; padding: 8px 12px; border-radius: 10px; font-weight:700;">Salir</button>
+            </div>
+        </div>
+
+        <div class="main fade-in">
+            <div class="header">
+                <div class="page-logo">
+                    <h2 id="page-title">Upload Center</h2>
+                </div>
+                <div style="display: flex; gap: 16px; align-items: center;">
+                    <button id="reset-btn" class="btn-secondary" onclick="resetUI()" style="padding: 10px 20px;">🏠 Inicio</button>
+                    <div id="status-indicator" style="display:none">
+                        <div class="spinner"></div>
+                        <span>SISTEMA ACTIVO</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="controls-card">
+                <select id="series-select">
+                    <option value="" disabled selected>Cargando catálogo local...</option>
+                </select>
+                <div class="action-btns">
+                    <button id="action-btn" onclick="runAction()">Lanzar Proceso</button>
+                    <button class="btn-secondary" onclick="clearTerm()">Limpiar Consola</button>
+                </div>
+            </div>
+
+            <div class="terminal-container">
+                <div class="terminal-header">
+                    <div style="display: flex; gap: 8px;">
+                        <div class="dot red"></div>
+                        <div class="dot yellow"></div>
+                        <div class="dot green"></div>
+                    </div>
+                    <span style="margin-left: auto; font-size: 0.7rem; color: var(--text-muted); font-weight: 800; letter-spacing: 0.1em;">TERMINAL OUTPUT V2.8</span>
+                </div>
+                <div class="terminal" id="terminal">
+                    <div class="log-line log-info">Consola inicializada correctamente.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket-lib.js"></script>
+    <script src="/public/js/client.js"></script>
+</body>
+</html>

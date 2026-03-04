@@ -1,0 +1,6 @@
+feat: v2.3.0 Smart Upload + Web UI Buttons (Clean Build)
+
+- Restaurado EXE limpio (sin icono) para evitar corrupción
+- Añadidos botones 'Sí a Todo' y 'No a Todo' en interfaz web
+- Lógica de Smart Upload (verificación de páginas y salto automático)
+- Limpieza de scripts experimentales

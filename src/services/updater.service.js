@@ -12,6 +12,7 @@ const DEFAULT_UPDATE_URL = 'https://raw.githubusercontent.com/FrancJCC/uploader-
 
 class UpdaterService {
     constructor() {
+        // En PKG, packageJson.version puede ser inconsistente si no se lee del archivo físico o si pkg inyecta algo
         this.currentVersion = packageJson.version;
         this.updateUrl = process.env.UPDATE_URL || DEFAULT_UPDATE_URL;
     }
@@ -21,30 +22,49 @@ class UpdaterService {
      * Retorna true si remote > local
      */
     isNewer(local, remote) {
-        const localParts = local.split('.').map(Number);
-        const remoteParts = remote.split('.').map(Number);
+        if (!local || !remote) return false;
+        
+        // Limpiar posibles prefijos 'v'
+        const l = local.replace(/^v/, '');
+        const r = remote.replace(/^v/, '');
+        
+        if (l === r) return false;
+
+        const localParts = l.split('.').map(Number);
+        const remoteParts = r.split('.').map(Number);
         
         for (let i = 0; i < 3; i++) {
-            if (remoteParts[i] > localParts[i]) return true;
-            if (remoteParts[i] < localParts[i]) return false;
+            const rPart = remoteParts[i] || 0;
+            const lPart = localParts[i] || 0;
+            if (rPart > lPart) return true;
+            if (rPart < lPart) return false;
         }
         return false;
     }
 
     async check() {
         try {
-            // Usamos fetch nativo de Node 18
-            const response = await fetch(this.updateUrl);
-            if (!response.ok) return null;
+            console.log(`[Updater] Verificando actualizaciones... (Local: v${this.currentVersion})`.gray);
+            
+            // Forzar no-cache para el check de versión
+            const response = await fetch(`${this.updateUrl}?t=${Date.now()}`);
+            if (!response.ok) {
+                console.log(`[Updater] Error al conectar con el servidor de actualizaciones (${response.status})`.yellow);
+                return null;
+            }
             
             const data = await response.json();
+            console.log(`[Updater] Versión remota encontrada: v${data.version}`.gray);
             
             if (this.isNewer(this.currentVersion, data.version)) {
+                console.log(`[Updater] ¡Nueva versión disponible! v${data.version}`.green.bold);
                 return data;
             }
+            
+            console.log(`[Updater] Estás en la versión más reciente.`.gray);
             return null;
         } catch (error) {
-            // Silenciosamente fallar si no hay internet o url inválida
+            console.log(`[Updater] Error de red al buscar actualizaciones: ${error.message}`.yellow);
             return null;
         }
     }
@@ -52,7 +72,8 @@ class UpdaterService {
     async download(url, targetPath) {
         const spinner = ora('Descargando actualización...').start();
         try {
-            const response = await fetch(url);
+            // No-cache para la descarga del binario también
+            const response = await fetch(`${url}?t=${Date.now()}`);
             if (!response.ok) throw new Error(`Error HTTP ${response.status}`);
             
             const buffer = await response.arrayBuffer();
