@@ -53,8 +53,27 @@ if (missing.length > 0) {
     process.exit(1);
 }
 
+// Construir MONGO_URI dinámicamente si hay credenciales separadas
+let mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/neomanga';
+const dbUser = process.env.DB_USERNAME;
+const dbPass = process.env.DB_PASSWORD;
+
+if (dbUser && dbPass) {
+    // Si la URI ya tiene protocolo, inyectar user:pass
+    if (mongoUri.includes('://')) {
+        const parts = mongoUri.split('://');
+        // Verificar si ya tiene credenciales (opcional, pero mejor reemplazarlas si vienen de env vars)
+        if (parts[1].includes('@')) {
+            const hostPart = parts[1].split('@')[1];
+            mongoUri = `${parts[0]}://${dbUser}:${dbPass}@${hostPart}`;
+        } else {
+            mongoUri = `${parts[0]}://${dbUser}:${dbPass}@${parts[1]}`;
+        }
+    }
+}
+
 module.exports = {
-    MONGO_URI: process.env.MONGO_URI || 'mongodb://localhost:27017/neomanga',
+    MONGO_URI: mongoUri,
     CONTENT_DIR: process.env.CONTENT_DIR || 'E:\\NeoManga\\downloader\\downloads',
     S3: {
         ENDPOINT: process.env.S3_ENDPOINT,
