@@ -7,11 +7,11 @@ exports.login = async (req, res) => {
         console.log(`[AUTH] Intento de login: ${email}`);
 
         // 1. Find User
-        const user = await User.findOne({ email: email.toLowerCase() });
+        const user = await User.findOne({ email: { $regex: new RegExp(`^${email.trim()}$`, 'i') } });
         
         if (!user) {
-            console.log(`[AUTH] Usuario no encontrado: ${email}`);
-            return res.status(401).json({ error: 'Usuario no encontrado' });
+            console.log(`[AUTH] Usuario no encontrado (email exacto o trim): ${email}`);
+            return res.status(401).json({ error: 'Credenciales inválidas' });
         }
 
         // 2. Check Password
@@ -24,7 +24,7 @@ exports.login = async (req, res) => {
         
         if (!isMatch) {
             console.log(`[AUTH] Contraseña incorrecta para: ${email}`);
-            return res.status(401).json({ error: 'Contraseña incorrecta' });
+            return res.status(401).json({ error: 'Credenciales inválidas' });
         }
 
         console.log(`[AUTH] Login exitoso: ${user.username}`);

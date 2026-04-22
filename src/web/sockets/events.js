@@ -78,9 +78,5 @@ module.exports = (io) => {
             }
         });
 
-        // Listen for input responses
-        socket.on('resolve-confirm', (data) => {
-            prompter.resolveConfirm(data.result);
-        });
     });
 };
