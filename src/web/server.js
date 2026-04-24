@@ -15,6 +15,8 @@ const JS_CLIENT_CONTENT = `
 let currentMode = 'upload';
 let isRunning = false;
 let socket = null;
+var selectedGenres = new Set();
+var dbSeriesCache = [];
 
 // 2. Initialize Socket.IO safely
 try {
@@ -24,11 +26,11 @@ try {
 } catch (e) { console.error('Error socket:', e); }
 
 // --- AUTH PERSISTENCE LOGIC ---
-document.addEventListener('DOMContentLoaded', () => {
-    const storedUser = localStorage.getItem('neomanga_user');
+document.addEventListener('DOMContentLoaded', function() {
+    var storedUser = localStorage.getItem('neomanga_user');
     if (storedUser) {
         try {
-            const user = JSON.parse(storedUser);
+            var user = JSON.parse(storedUser);
             if (user && user.username) showApp(user);
         } catch (e) { localStorage.removeItem('neomanga_user'); }
     }
@@ -43,10 +45,10 @@ function showApp(user) {
 }
 
 async function login() {
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    const errorMsg = document.getElementById('login-error');
-    const btn = document.querySelector('.login-btn');
+    var email = document.getElementById('email').value;
+    var password = document.getElementById('password').value;
+    var errorMsg = document.getElementById('login-error');
+    var btn = document.querySelector('.login-btn');
 
     if (!email || !password) {
         errorMsg.textContent = "Completa todos los campos";
@@ -59,12 +61,12 @@ async function login() {
     errorMsg.style.display = 'none';
 
     try {
-        const res = await fetch('/api/login', {
+        var res = await fetch('/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
+            body: JSON.stringify({ email: email, password: password })
         });
-        const data = await res.json();
+        var data = await res.json();
         if (res.ok) {
             localStorage.setItem('neomanga_user', JSON.stringify({ username: data.username, roles: data.roles }));
             showApp(data);
@@ -88,22 +90,23 @@ function logout() {
 
 async function loadConfig() {
     try {
-        const res = await fetch('/api/config');
-        const data = await res.json();
+        var res = await fetch('/api/config');
+        var data = await res.json();
         document.getElementById('current-folder').textContent = data.contentDir || 'No definida';
     } catch (err) {}
 }
 
 async function loadSeries() {
-    const select = document.getElementById('series-select');
+    var select = document.getElementById('series-select');
+    if (!select) return;
     select.innerHTML = '<option value="" disabled selected>Cargando series...</option>';
     try {
-        const res = await fetch('/api/series');
-        const data = await res.json();
+        var res = await fetch('/api/series');
+        var data = await res.json();
         select.innerHTML = '<option value="" disabled selected>Selecciona una serie...</option>';
         select.innerHTML += '<option value="ALL">--- TODAS LAS SERIES ---</option>';
-        data.forEach(s => {
-            const opt = document.createElement('option');
+        data.forEach(function(s) {
+            var opt = document.createElement('option');
             opt.value = s.id;
             opt.textContent = s.title;
             select.appendChild(opt);
@@ -114,11 +117,11 @@ async function loadSeries() {
 }
 
 async function promptChangeFolder() {
-    const current = document.getElementById('current-folder').textContent;
-    const newPath = prompt("Ingresa la ruta completa de la carpeta:", current);
+    var current = document.getElementById('current-folder').textContent;
+    var newPath = prompt("Ingresa la ruta completa de la carpeta:", current);
     if (newPath && newPath !== current) {
         try {
-            const res = await fetch('/api/config/folder', {
+            var res = await fetch('/api/config/folder', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path: newPath })
@@ -132,64 +135,63 @@ async function promptChangeFolder() {
 }
 
 if (socket) {
-    socket.on('log', (data) => log(data.message, data.type));
-    socket.on('status', (data) => {
+    socket.on('log', function(data) { log(data.message, data.type); });
+    socket.on('status', function(data) {
         isRunning = data.running;
-        document.getElementById('status-indicator').style.display = isRunning ? 'block' : 'none';
-        document.getElementById('action-btn').disabled = isRunning;
+        var indicator = document.getElementById('status-indicator');
+        if (indicator) indicator.style.display = isRunning ? 'block' : 'none';
+        var btn = document.getElementById('action-btn');
+        if (btn) btn.disabled = isRunning;
     });
-    socket.on('request-confirm', (data) => showConfirm(data.message));
+    socket.on('request-confirm', function(data) { showConfirm(data.message); });
 }
 
-function setMode(mode) {
+function setMode(mode, event) {
     currentMode = mode;
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
     
-    // Fix: Use currentTarget to get the button even if an icon was clicked
-    const target = event ? event.currentTarget : null;
+    var target = event ? event.currentTarget : null;
     if (target) target.classList.add('active');
 
-    const title = document.getElementById('page-title');
-    const btn = document.getElementById('action-btn');
-    const standardControls = document.getElementById('standard-controls');
-    const createSection = document.getElementById('create-series-section');
-    const listSection = document.getElementById('series-list-section');
-    const editSection = document.getElementById('edit-series-section');
+    var title = document.getElementById('page-title');
+    var btn = document.getElementById('action-btn');
+    var standardControls = document.getElementById('standard-controls');
+    var createSection = document.getElementById('create-series-section');
+    var listSection = document.getElementById('series-list-section');
+    var editSection = document.getElementById('edit-series-section');
 
-    // Hide all main sections by default
-    standardControls.style.display = 'none';
-    createSection.style.display = 'none';
-    listSection.style.display = 'none';
-    editSection.style.display = 'none';
+    if (standardControls) standardControls.style.display = 'none';
+    if (createSection) createSection.style.display = 'none';
+    if (listSection) listSection.style.display = 'none';
+    if (editSection) editSection.style.display = 'none';
 
     if (mode === 'create') {
-        title.textContent = 'Crear Nueva Serie';
-        createSection.style.display = 'flex';
+        if (title) title.textContent = 'Crear Nueva Serie';
+        if (createSection) createSection.style.display = 'flex';
         generateNewId();
         loadGenres();
     } else if (mode === 'list') {
-        title.textContent = 'Listado de Series';
-        listSection.style.display = 'flex';
+        if (title) title.textContent = 'Listado de Series';
+        if (listSection) listSection.style.display = 'flex';
         loadDbSeries();
     } else if (mode === 'edit') {
-        title.textContent = 'Editar Serie';
-        editSection.style.display = 'flex';
+        if (title) title.textContent = 'Editar Serie';
+        if (editSection) editSection.style.display = 'flex';
     } else {
-        standardControls.style.display = 'flex';
-        if (mode === 'upload') { title.textContent = 'Upload Manager'; btn.textContent = 'Iniciar Upload'; }
-        if (mode === 'verify') { title.textContent = 'Verificación'; btn.textContent = 'Iniciar Verificación'; }
-        if (mode === 'repair') { title.textContent = 'Reparación'; btn.textContent = 'Iniciar Reparación'; }
+        if (standardControls) standardControls.style.display = 'flex';
+        if (mode === 'upload') { if (title) title.textContent = 'Upload Manager'; if (btn) btn.textContent = 'Iniciar Upload'; }
+        if (mode === 'verify') { if (title) title.textContent = 'Verificación'; if (btn) btn.textContent = 'Iniciar Verificación'; }
+        if (mode === 'repair') { if (title) title.textContent = 'Reparación'; if (btn) btn.textContent = 'Iniciar Reparación'; }
     }
 }
 
-let dbSeriesCache = [];
-
 async function loadDbSeries() {
-    const grid = document.getElementById('series-grid');
+    var grid = document.getElementById('series-grid');
+    if (!grid) return;
     grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px;">Cargando catálogo...</div>';
     
     try {
-        const res = await fetch('/api/db-series');
+        var res = await fetch('/api/db-series');
         dbSeriesCache = await res.json();
         renderSeriesGrid(dbSeriesCache);
     } catch (err) {
@@ -198,7 +200,8 @@ async function loadDbSeries() {
 }
 
 function renderSeriesGrid(series) {
-    const grid = document.getElementById('series-grid');
+    var grid = document.getElementById('series-grid');
+    if (!grid) return;
     grid.innerHTML = '';
     
     if (series.length === 0) {
@@ -206,8 +209,8 @@ function renderSeriesGrid(series) {
         return;
     }
 
-    series.forEach(s => {
-        const card = document.createElement('div');
+    series.forEach(function(s) {
+        var card = document.createElement('div');
         card.className = 'series-card';
         card.innerHTML = '\
             <img src="' + (s.coverUrl || '/public/logo-header.png') + '" alt="' + s.title + '" onerror="this.src=\'/public/logo-header.png\'">\
@@ -222,11 +225,14 @@ function renderSeriesGrid(series) {
     });
 }
 
-document.getElementById('series-search')?.addEventListener('input', (e) => {
-    const term = e.target.value.toLowerCase();
-    const filtered = dbSeriesCache.filter(s => s.title.toLowerCase().includes(term));
-    renderSeriesGrid(filtered);
-});
+var searchInput = document.getElementById('series-search');
+if (searchInput) {
+    searchInput.addEventListener('input', function(e) {
+        var term = e.target.value.toLowerCase();
+        var filtered = dbSeriesCache.filter(function(s) { return s.title.toLowerCase().includes(term); });
+        renderSeriesGrid(filtered);
+    });
+}
 
 async function openEditSeries(id) {
     try {
@@ -251,10 +257,8 @@ async function openEditSeries(id) {
             preview.style.display = 'none';
         }
 
-        // Setup genres for edit
         selectedGenres = new Set(s.genres || []);
         loadEditGenres();
-        
         setMode('edit');
     } catch (err) {
         alert('Error al cargar detalles de la serie');
@@ -262,45 +266,30 @@ async function openEditSeries(id) {
 }
 
 async function loadEditGenres() {
-    const container = document.getElementById('edit-genres-container');
+    var container = document.getElementById('edit-genres-container');
+    if (!container) return;
     try {
-        const res = await fetch('/api/genres');
-        const genres = await res.json();
+        var res = await fetch('/api/genres');
+        var genres = await res.json();
         container.innerHTML = '';
         
-        // Ensure all currently selected genres (even new ones) are shown
-        const allPossibleGenres = new Set([...genres, ...selectedGenres]);
+        var allSet = new Set(genres);
+        selectedGenres.forEach(function(g) { allSet.add(g); });
         
-        allPossibleGenres.forEach(genre => {
-            const span = document.createElement('span');
+        allSet.forEach(function(genre) {
+            var span = document.createElement('span');
             span.className = 'genre-pill';
             span.textContent = genre;
-            span.onclick = () => toggleGenre(genre, span);
+            span.onclick = function() { toggleGenre(genre, span); };
             if (selectedGenres.has(genre)) span.classList.add('selected');
             container.appendChild(span);
         });
     } catch (err) {}
 }
 
-document.getElementById('edit-new-genre')?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        const val = e.target.value.trim();
-        if (val && !selectedGenres.has(val)) {
-            selectedGenres.add(val);
-            const container = document.getElementById('edit-genres-container');
-            const span = document.createElement('span');
-            span.className = 'genre-pill selected';
-            span.textContent = val;
-            span.onclick = () => toggleGenre(val, span);
-            container.appendChild(span);
-            e.target.value = '';
-        }
-    }
-});
-
 function handleEditFileSelect(event) {
-    const file = event.target.files[0];
-    const display = document.getElementById('edit-file-name');
+    var file = event.target.files[0];
+    var display = document.getElementById('edit-file-name');
     if (file) {
         display.textContent = '📄 Nuevo archivo: ' + file.name;
         display.style.display = 'block';
@@ -310,24 +299,24 @@ function handleEditFileSelect(event) {
 }
 
 async function submitUpdateSeries() {
-    const id = document.getElementById('edit-id').value;
-    const title = document.getElementById('edit-title').value;
-    const type = document.getElementById('edit-type').value;
-    const status = document.getElementById('edit-status').value;
-    const author = document.getElementById('edit-author').value;
-    const year = document.getElementById('edit-year').value;
-    const description = document.getElementById('edit-description').value;
-    const coverUrl = document.getElementById('edit-cover-url').value;
-    const coverFile = document.getElementById('edit-cover-file').files[0];
+    var id = document.getElementById('edit-id').value;
+    var title = document.getElementById('edit-title').value;
+    var type = document.getElementById('edit-type').value;
+    var status = document.getElementById('edit-status').value;
+    var author = document.getElementById('edit-author').value;
+    var year = document.getElementById('edit-year').value;
+    var description = document.getElementById('edit-description').value;
+    var coverUrl = document.getElementById('edit-cover-url').value;
+    var coverFile = document.getElementById('edit-cover-file').files[0];
 
     if (!title) return alert('El título es obligatorio');
 
-    const btn = document.getElementById('update-btn');
-    const originalText = btn.textContent;
+    var btn = document.getElementById('update-btn');
+    var originalText = btn.textContent;
     btn.disabled = true;
     btn.textContent = 'Guardando Cambios...';
 
-    const formData = new FormData();
+    var formData = new FormData();
     formData.append('title', title);
     formData.append('type', type);
     formData.append('status', status);
@@ -351,7 +340,7 @@ async function submitUpdateSeries() {
         if (response.ok) {
             log('✅ Serie actualizada: ' + title, 'success');
             setMode('list');
-            loadSeries(); // Refresh dropdown
+            loadSeries();
         } else {
             var data = await response.json();
             alert('Error: ' + data.error);
@@ -365,42 +354,32 @@ async function submitUpdateSeries() {
 }
 
 function generateNewId() {
-    // Generate a 24-character hex string (simulating MongoDB ObjectId)
-    const timestamp = Math.floor(Date.now() / 1000).toString(16);
-    const random = 'xxxxxxxxxxxxxxxx'.replace(/[x]/g, () => {
+    var timestamp = Math.floor(Date.now() / 1000).toString(16);
+    var random = 'xxxxxxxxxxxxxxxx'.replace(/[x]/g, function() {
         return (Math.random() * 16 | 0).toString(16);
     });
-    const newId = timestamp + random;
-    document.getElementById('create-slug').value = newId;
+    var newId = timestamp + random;
+    var input = document.getElementById('create-slug');
+    if (input) input.value = newId;
     return newId;
 }
 
-function updateSlug() {
-    // Deprecated: No longer generating slug from title
-}
-
-let selectedGenres = new Set();
-
 async function loadGenres() {
-    const container = document.getElementById('genres-container');
+    var container = document.getElementById('genres-container');
+    if (!container) return;
     try {
-        const res = await fetch('/api/genres');
-        const genres = await res.json();
+        var res = await fetch('/api/genres');
+        var genres = await res.json();
         container.innerHTML = '';
-        if (genres.length === 0) {
-            container.innerHTML = '<span style="color: var(--text-muted); font-size: 0.8rem;">No hay géneros en la BD. Agrega uno abajo.</span>';
-        }
-        genres.forEach(genre => {
-            const span = document.createElement('span');
+        genres.forEach(function(genre) {
+            var span = document.createElement('span');
             span.className = 'genre-pill';
             span.textContent = genre;
-            span.onclick = () => toggleGenre(genre, span);
+            span.onclick = function() { toggleGenre(genre, span); };
             if (selectedGenres.has(genre)) span.classList.add('selected');
             container.appendChild(span);
         });
-    } catch (err) {
-        container.innerHTML = '<span style="color: var(--error-color);">Error cargando géneros</span>';
-    }
+    } catch (err) {}
 }
 
 function toggleGenre(genre, element) {
@@ -413,25 +392,47 @@ function toggleGenre(genre, element) {
     }
 }
 
-document.getElementById('new-genre')?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        const val = e.target.value.trim();
-        if (val && !selectedGenres.has(val)) {
-            selectedGenres.add(val);
-            const container = document.getElementById('genres-container');
-            const span = document.createElement('span');
-            span.className = 'genre-pill selected';
-            span.textContent = val;
-            span.onclick = () => toggleGenre(val, span);
-            container.appendChild(span);
-            e.target.value = '';
+var newGenreInput = document.getElementById('new-genre');
+if (newGenreInput) {
+    newGenreInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            var val = e.target.value.trim();
+            if (val && !selectedGenres.has(val)) {
+                selectedGenres.add(val);
+                var container = document.getElementById('genres-container');
+                var span = document.createElement('span');
+                span.className = 'genre-pill selected';
+                span.textContent = val;
+                span.onclick = function() { toggleGenre(val, span); };
+                container.appendChild(span);
+                e.target.value = '';
+            }
         }
-    }
-});
+    });
+}
+
+var editGenreInput = document.getElementById('edit-new-genre');
+if (editGenreInput) {
+    editGenreInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            var val = e.target.value.trim();
+            if (val && !selectedGenres.has(val)) {
+                selectedGenres.add(val);
+                var container = document.getElementById('edit-genres-container');
+                var span = document.createElement('span');
+                span.className = 'genre-pill selected';
+                span.textContent = val;
+                span.onclick = function() { toggleGenre(val, span); };
+                container.appendChild(span);
+                e.target.value = '';
+            }
+        }
+    });
+}
 
 function handleFileSelect(event) {
-    const file = event.target.files[0];
-    const display = document.getElementById('file-name-display');
+    var file = event.target.files[0];
+    var display = document.getElementById('file-name-display');
     if (file) {
         display.textContent = '📄 Archivo seleccionado: ' + file.name;
         display.style.display = 'block';
@@ -441,24 +442,24 @@ function handleFileSelect(event) {
 }
 
 async function submitCreateSeries() {
-    const title = document.getElementById('create-title').value;
-    const type = document.getElementById('create-type').value;
-    const status = document.getElementById('create-status').value;
-    const author = document.getElementById('create-author').value;
-    const year = document.getElementById('create-year').value;
-    const description = document.getElementById('create-description').value;
-    const coverUrl = document.getElementById('create-cover-url').value;
-    const coverFile = document.getElementById('create-cover-file').files[0];
-    const customId = document.getElementById('create-slug').value;
+    var title = document.getElementById('create-title').value;
+    var type = document.getElementById('create-type').value;
+    var status = document.getElementById('create-status').value;
+    var author = document.getElementById('create-author').value;
+    var year = document.getElementById('create-year').value;
+    var description = document.getElementById('create-description').value;
+    var coverUrl = document.getElementById('create-cover-url').value;
+    var coverFile = document.getElementById('create-cover-file').files[0];
+    var customId = document.getElementById('create-slug').value;
 
     if (!title) return alert('El título es obligatorio');
 
-    const btn = document.getElementById('create-btn');
-    const originalText = btn.textContent;
+    var btn = document.getElementById('create-btn');
+    var originalText = btn.textContent;
     btn.disabled = true;
     btn.textContent = 'Creando Serie...';
 
-    const formData = new FormData();
+    var formData = new FormData();
     formData.append('title', title);
     formData.append('type', type);
     formData.append('status', status);
@@ -472,15 +473,14 @@ async function submitCreateSeries() {
     }
     formData.append('customId', customId);
     
-    // Add genres
-    selectedGenres.forEach(g => formData.append('genres', g));
+    selectedGenres.forEach(function(g) { formData.append('genres', g); });
 
     try {
-        const res = await fetch('/api/series', {
+        var res = await fetch('/api/series', {
             method: 'POST',
             body: formData
         });
-        const data = await res.json();
+        var data = await res.json();
         if (res.ok) {
             log('✅ Serie creada con éxito: ' + title, 'success');
             resetCreateForm();
@@ -513,10 +513,10 @@ function resetCreateForm() {
 }
 
 function runAction() {
-    const series = document.getElementById('series-select').value;
+    var series = document.getElementById('series-select').value;
     if (!series) return alert('Selecciona una serie');
     document.getElementById('terminal').innerHTML = '';
-    socket.emit('start-' + currentMode, { series });
+    socket.emit('start-' + currentMode, { series: series });
 }
 
 function showConfirm(msg) {
@@ -526,26 +526,21 @@ function showConfirm(msg) {
 
 function resolveConfirm(result) {
     document.getElementById('confirm-modal').style.display = 'none';
-    socket.emit('resolve-confirm', { result });
+    socket.emit('resolve-confirm', { result: result });
 }
 
-function log(msg, type = 'info') {
-    const term = document.getElementById('terminal');
-    const div = document.createElement('div');
-    div.className = 'log-line log-' + type;
-    
-    // Add icon based on type
-    let icon = 'ℹ️';
-    if (type === 'success') icon = '✅';
-    if (type === 'error') icon = '❌';
-    if (type === 'warn') icon = '⚠️';
-    
-    div.innerHTML = \`<span style="margin-right:10px; opacity:0.7">\${icon}</span> <span>\${msg}</span>\`;
+function log(msg, type) {
+    var term = document.getElementById('terminal');
+    if (!term) return;
+    var div = document.createElement('div');
+    div.className = 'log-line log-' + (type || 'info');
+    var icon = type === 'success' ? '✅' : (type === 'error' ? '❌' : (type === 'warn' ? '⚠️' : 'ℹ️'));
+    div.innerHTML = '<span style="margin-right:10px; opacity:0.7">' + icon + '</span> <span>' + msg + '</span>';
     term.appendChild(div);
     term.scrollTop = term.scrollHeight;
 }
 
-function clearTerm() { document.getElementById('terminal').innerHTML = ''; }
+function clearTerm() { var term = document.getElementById('terminal'); if (term) term.innerHTML = ''; }
 function resetUI() { location.reload(); }
 `;
 
@@ -1081,20 +1076,6 @@ app.use((req, res, next) => {
 // JSON Body Parser
 app.use(express.json());
 
-// Log static file requests
-app.use((req, res, next) => {
-    if (req.url.startsWith('/public')) {
-        console.log(`[DEBUG] Static request: ${req.url}`);
-    }
-    next();
-});
-
-// Serve Static Assets from src/web/public
-// Use path.resolve to ensure absolute paths and handle pkg virtual filesystem correctly
-const publicDir = path.resolve(__dirname, 'public');
-console.log(`[DEBUG] Attempting to serve static files from: ${publicDir}`);
-app.use('/public', express.static(publicDir));
-
 // Serve Socket.IO Client Library explicitly (Fixes pkg/injection issues)
 app.get('/socket-lib.js', (req, res) => {
     res.type('application/javascript');
@@ -1112,6 +1093,10 @@ app.get('/public/js/client.js', (req, res) => {
     res.type('application/javascript');
     res.send(JS_CLIENT_CONTENT);
 });
+
+// Serve Static Assets from src/web/public
+const publicDir = path.resolve(__dirname, 'public');
+app.use('/public', express.static(publicDir));
 
 // Modular Routes
 app.use(routes);

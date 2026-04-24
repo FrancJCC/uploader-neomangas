@@ -83,6 +83,7 @@ async function loadConfig() {
 
 async function loadSeries() {
     const select = document.getElementById('series-select');
+    if (!select) return;
     select.innerHTML = '<option value="" disabled selected>Cargando series...</option>';
     try {
         const res = await fetch('/api/series');
@@ -122,59 +123,257 @@ if (socket) {
     socket.on('log', (data) => log(data.message, data.type));
     socket.on('status', (data) => {
         isRunning = data.running;
-        document.getElementById('status-indicator').style.display = isRunning ? 'block' : 'none';
-        document.getElementById('action-btn').disabled = isRunning;
+        const indicator = document.getElementById('status-indicator');
+        if (indicator) indicator.style.display = isRunning ? 'block' : 'none';
+        const btn = document.getElementById('action-btn');
+        if (btn) btn.disabled = isRunning;
     });
     socket.on('request-confirm', (data) => showConfirm(data.message));
 }
 
-function setMode(mode) {
+function setMode(mode, event) {
     currentMode = mode;
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
     
-    // Fix: Use currentTarget to get the button even if an icon was clicked
-    const target = event.currentTarget;
+    // Fix: Use currentTarget safely
+    const target = event ? event.currentTarget : null;
     if (target) target.classList.add('active');
 
     const title = document.getElementById('page-title');
     const btn = document.getElementById('action-btn');
     const standardControls = document.getElementById('standard-controls');
     const createSection = document.getElementById('create-series-section');
+    const listSection = document.getElementById('series-list-section');
+    const editSection = document.getElementById('edit-series-section');
+
+    // Hide all main sections by default
+    if (standardControls) standardControls.style.display = 'none';
+    if (createSection) createSection.style.display = 'none';
+    if (listSection) listSection.style.display = 'none';
+    if (editSection) editSection.style.display = 'none';
 
     if (mode === 'create') {
-        title.textContent = 'Crear Nueva Serie';
-        standardControls.style.display = 'none';
-        createSection.style.display = 'flex';
+        if (title) title.textContent = 'Crear Nueva Serie';
+        if (createSection) createSection.style.display = 'flex';
         generateNewId();
         loadGenres();
+    } else if (mode === 'list') {
+        if (title) title.textContent = 'Listado de Series';
+        if (listSection) listSection.style.display = 'flex';
+        loadDbSeries();
+    } else if (mode === 'edit') {
+        if (title) title.textContent = 'Editar Serie';
+        if (editSection) editSection.style.display = 'flex';
     } else {
-        standardControls.style.display = 'flex';
-        createSection.style.display = 'none';
-        if (mode === 'upload') { title.textContent = 'Upload Manager'; btn.textContent = 'Iniciar Upload'; }
-        if (mode === 'verify') { title.textContent = 'Verificación'; btn.textContent = 'Iniciar Verificación'; }
-        if (mode === 'repair') { title.textContent = 'Reparación'; btn.textContent = 'Iniciar Reparación'; }
+        if (standardControls) standardControls.style.display = 'flex';
+        if (mode === 'upload') { if (title) title.textContent = 'Upload Manager'; if (btn) btn.textContent = 'Iniciar Upload'; }
+        if (mode === 'verify') { if (title) title.textContent = 'Verificación'; if (btn) btn.textContent = 'Iniciar Verificación'; }
+        if (mode === 'repair') { if (title) title.textContent = 'Reparación'; if (btn) btn.textContent = 'Iniciar Reparación'; }
+    }
+}
+
+let dbSeriesCache = [];
+
+async function loadDbSeries() {
+    const grid = document.getElementById('series-grid');
+    if (!grid) return;
+    grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px;">Cargando catálogo...</div>';
+    
+    try {
+        const res = await fetch('/api/db-series');
+        dbSeriesCache = await res.json();
+        renderSeriesGrid(dbSeriesCache);
+    } catch (err) {
+        grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--error-color);">Error al cargar series</div>';
+    }
+}
+
+function renderSeriesGrid(series) {
+    const grid = document.getElementById('series-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    
+    if (series.length === 0) {
+        grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">No se encontraron series</div>';
+        return;
+    }
+
+    series.forEach(s => {
+        const card = document.createElement('div');
+        card.className = 'series-card';
+        card.innerHTML = '\
+            <img src="' + (s.coverUrl || '/public/logo-header.png') + '" alt="' + s.title + '" onerror="this.src=\'/public/logo-header.png\'">\
+            <div class="series-card-content">\
+                <div class="series-card-title">' + s.title + '</div>\
+                <div class="series-card-meta">' + s.type + ' • ' + s.status + '</div>\
+                <div class="series-card-id">' + s.folderPath + '</div>\
+                <button class="btn-small" style="margin-top: 10px; background: var(--accent-color);" onclick="openEditSeries(\'' + s._id + '\')">✏️ Editar Serie</button>\
+            </div>\
+        ';
+        grid.appendChild(card);
+    });
+}
+
+document.getElementById('series-search')?.addEventListener('input', (e) => {
+    const term = e.target.value.toLowerCase();
+    const filtered = dbSeriesCache.filter(s => s.title.toLowerCase().includes(term));
+    renderSeriesGrid(filtered);
+});
+
+async function openEditSeries(id) {
+    try {
+        const res = await fetch('/api/series/' + id);
+        const s = await res.json();
+        
+        document.getElementById('edit-id').value = s._id;
+        document.getElementById('edit-title').value = s.title;
+        document.getElementById('edit-slug').value = s.folderPath;
+        document.getElementById('edit-type').value = s.type;
+        document.getElementById('edit-status').value = s.status;
+        document.getElementById('edit-author').value = s.author || '';
+        document.getElementById('edit-year').value = s.releaseYear || '';
+        document.getElementById('edit-description').value = s.description || '';
+        document.getElementById('edit-cover-url').value = s.coverUrl || '';
+        
+        const preview = document.getElementById('edit-cover-preview');
+        if (s.coverUrl) {
+            preview.src = s.coverUrl;
+            preview.style.display = 'block';
+        } else {
+            preview.style.display = 'none';
+        }
+
+        // Setup genres for edit
+        selectedGenres = new Set(s.genres || []);
+        loadEditGenres();
+        
+        setMode('edit');
+    } catch (err) {
+        alert('Error al cargar detalles de la serie');
+    }
+}
+
+async function loadEditGenres() {
+    const container = document.getElementById('edit-genres-container');
+    if (!container) return;
+    try {
+        const res = await fetch('/api/genres');
+        const genres = await res.json();
+        container.innerHTML = '';
+        
+        const allPossibleGenres = new Set([...genres, ...selectedGenres]);
+        
+        allPossibleGenres.forEach(genre => {
+            const span = document.createElement('span');
+            span.className = 'genre-pill';
+            span.textContent = genre;
+            span.onclick = () => toggleGenre(genre, span);
+            if (selectedGenres.has(genre)) span.classList.add('selected');
+            container.appendChild(span);
+        });
+    } catch (err) {}
+}
+
+document.getElementById('edit-new-genre')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        const val = e.target.value.trim();
+        if (val && !selectedGenres.has(val)) {
+            selectedGenres.add(val);
+            const container = document.getElementById('edit-genres-container');
+            const span = document.createElement('span');
+            span.className = 'genre-pill selected';
+            span.textContent = val;
+            span.onclick = () => toggleGenre(val, span);
+            container.appendChild(span);
+            e.target.value = '';
+        }
+    }
+});
+
+function handleEditFileSelect(event) {
+    const file = event.target.files[0];
+    const display = document.getElementById('edit-file-name');
+    if (file) {
+        display.textContent = '📄 Nuevo archivo: ' + file.name;
+        display.style.display = 'block';
+        document.getElementById('edit-cover-url').disabled = true;
+        document.getElementById('edit-cover-url').style.opacity = '0.5';
+    }
+}
+
+async function submitUpdateSeries() {
+    const id = document.getElementById('edit-id').value;
+    const title = document.getElementById('edit-title').value;
+    const type = document.getElementById('edit-type').value;
+    const status = document.getElementById('edit-status').value;
+    const author = document.getElementById('edit-author').value;
+    const year = document.getElementById('edit-year').value;
+    const description = document.getElementById('edit-description').value;
+    const coverUrl = document.getElementById('edit-cover-url').value;
+    const coverFile = document.getElementById('edit-cover-file').files[0];
+
+    if (!title) return alert('El título es obligatorio');
+
+    const btn = document.getElementById('update-btn');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Guardando Cambios...';
+
+    const formData = new FormData();
+    formData.append('title', title);
+    formData.append('type', type);
+    formData.append('status', status);
+    formData.append('author', author);
+    formData.append('releaseYear', year);
+    formData.append('description', description);
+    
+    if (coverFile) {
+        formData.append('cover', coverFile);
+    } else {
+        formData.append('coverUrl', coverUrl);
+    }
+    
+    selectedGenres.forEach(g => formData.append('genres', g));
+
+    try {
+        const res = await fetch('/api/series/' + id, {
+            method: 'PUT',
+            body: formData
+        });
+        if (res.ok) {
+            log('✅ Serie actualizada: ' + title, 'success');
+            setMode('list');
+            loadSeries(); // Refresh dropdown
+        } else {
+            const data = await res.json();
+            alert('Error: ' + data.error);
+        }
+    } catch (err) {
+        alert('Error de conexión');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
     }
 }
 
 function generateNewId() {
-    // Generate a 24-character hex string (simulating MongoDB ObjectId)
     const timestamp = Math.floor(Date.now() / 1000).toString(16);
     const random = 'xxxxxxxxxxxxxxxx'.replace(/[x]/g, () => {
         return (Math.random() * 16 | 0).toString(16);
     });
     const newId = timestamp + random;
-    document.getElementById('create-slug').value = newId;
+    const input = document.getElementById('create-slug');
+    if (input) input.value = newId;
     return newId;
 }
 
-function updateSlug() {
-    // Deprecated: No longer generating slug from title
-}
+function updateSlug() {}
 
 let selectedGenres = new Set();
 
 async function loadGenres() {
     const container = document.getElementById('genres-container');
+    if (!container) return;
     try {
         const res = await fetch('/api/genres');
         const genres = await res.json();
@@ -264,7 +463,6 @@ async function submitCreateSeries() {
     }
     formData.append('customId', customId);
     
-    // Add genres
     selectedGenres.forEach(g => formData.append('genres', g));
 
     try {
@@ -323,19 +521,22 @@ function resolveConfirm(result) {
 
 function log(msg, type = 'info') {
     const term = document.getElementById('terminal');
+    if (!term) return;
     const div = document.createElement('div');
     div.className = 'log-line log-' + type;
     
-    // Add icon based on type
     let icon = 'ℹ️';
     if (type === 'success') icon = '✅';
     if (type === 'error') icon = '❌';
     if (type === 'warn') icon = '⚠️';
     
-    div.innerHTML = `<span style="margin-right:10px; opacity:0.7">${icon}</span> <span>${msg}</span>`;
+    div.innerHTML = '<span style="margin-right:10px; opacity:0.7">' + icon + '</span> <span>' + msg + '</span>';
     term.appendChild(div);
     term.scrollTop = term.scrollHeight;
 }
 
-function clearTerm() { document.getElementById('terminal').innerHTML = ''; }
+function clearTerm() { 
+    const term = document.getElementById('terminal');
+    if (term) term.innerHTML = ''; 
+}
 function resetUI() { location.reload(); }
