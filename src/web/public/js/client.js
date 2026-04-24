@@ -145,6 +145,7 @@ function setMode(mode) {
         title.textContent = 'Crear Nueva Serie';
         standardControls.style.display = 'none';
         createSection.style.display = 'flex';
+        generateNewId();
         loadGenres();
     } else {
         standardControls.style.display = 'flex';
@@ -155,13 +156,19 @@ function setMode(mode) {
     }
 }
 
+function generateNewId() {
+    // Generate a 24-character hex string (simulating MongoDB ObjectId)
+    const timestamp = Math.floor(Date.now() / 1000).toString(16);
+    const random = 'xxxxxxxxxxxxxxxx'.replace(/[x]/g, () => {
+        return (Math.random() * 16 | 0).toString(16);
+    });
+    const newId = timestamp + random;
+    document.getElementById('create-slug').value = newId;
+    return newId;
+}
+
 function updateSlug() {
-    const title = document.getElementById('create-title').value;
-    const slug = title.toLowerCase()
-        .replace(/[^a-z0-9]/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
-    document.getElementById('create-slug').value = slug;
+    // Deprecated: No longer generating slug from title
 }
 
 let selectedGenres = new Set();
@@ -234,6 +241,7 @@ async function submitCreateSeries() {
     const description = document.getElementById('create-description').value;
     const coverUrl = document.getElementById('create-cover-url').value;
     const coverFile = document.getElementById('create-cover-file').files[0];
+    const customId = document.getElementById('create-slug').value;
 
     if (!title) return alert('El título es obligatorio');
 
@@ -249,8 +257,12 @@ async function submitCreateSeries() {
     formData.append('author', author);
     formData.append('releaseYear', year);
     formData.append('description', description);
-    formData.append('coverUrl', coverUrl);
-    if (coverFile) formData.append('cover', coverFile);
+    if (coverFile) {
+        formData.append('cover', coverFile);
+    } else {
+        formData.append('coverUrl', coverUrl);
+    }
+    formData.append('customId', customId);
     
     // Add genres
     selectedGenres.forEach(g => formData.append('genres', g));
@@ -279,7 +291,7 @@ async function submitCreateSeries() {
 
 function resetCreateForm() {
     document.getElementById('create-title').value = '';
-    document.getElementById('create-slug').value = '';
+    generateNewId();
     document.getElementById('create-author').value = '';
     document.getElementById('create-year').value = '';
     document.getElementById('create-description').value = '';

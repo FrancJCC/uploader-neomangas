@@ -100,11 +100,14 @@
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                     <div class="form-group">
                         <label class="config-label">Título de la Serie</label>
-                        <input type="text" id="create-title" class="login-input" placeholder="Ej: One Piece" oninput="updateSlug()">
+                        <input type="text" id="create-title" class="login-input" placeholder="Ej: One Piece">
                     </div>
                     <div class="form-group">
-                        <label class="config-label">ID de la Serie (Slug)</label>
-                        <input type="text" id="create-slug" class="login-input" placeholder="one-piece" disabled style="opacity: 0.6; cursor: not-allowed;">
+                        <label class="config-label">ID de la Serie (Auto-generado)</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="create-slug" class="login-input" placeholder="698523b07f50..." disabled style="opacity: 0.8; cursor: not-allowed; flex: 1;">
+                            <button class="btn-secondary" onclick="generateNewId()" style="padding: 0 15px; font-size: 1.2rem;" title="Generar nuevo ID">🔄</button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label class="config-label">Tipo de Serie</label>

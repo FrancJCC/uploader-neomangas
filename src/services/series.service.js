@@ -5,6 +5,7 @@ const env = require('../config/env');
 const { getActiveBucket } = require('../config/storage');
 const path = require('path');
 const fs = require('fs-extra');
+const mongoose = require('mongoose');
 
 /**
  * Uploads a cover image to S3 for a specific series.
@@ -48,17 +49,19 @@ async function createSeries(data, coverFile) {
         releaseYear, 
         type, 
         genres, 
-        coverUrl: providedCoverUrl 
+        coverUrl: providedCoverUrl,
+        customId // Optional ID from frontend
     } = data;
 
-    // Generate folderPath (slug)
-    const folderPath = title.toLowerCase()
-        .replace(/[^a-z0-9]/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
+    // Use provided ID or generate a new MongoDB ObjectId
+    const seriesId = customId && mongoose.Types.ObjectId.isValid(customId) 
+        ? new mongoose.Types.ObjectId(customId) 
+        : new mongoose.Types.ObjectId();
+    
+    const folderPath = seriesId.toString();
 
     // Check if series already exists
-    const existing = await Manga.findOne({ folderPath });
+    const existing = await Manga.findOne({ $or: [{ _id: seriesId }, { folderPath }] });
     if (existing) {
         throw new Error(`La serie con el ID "${folderPath}" ya existe.`);
     }
@@ -71,6 +74,7 @@ async function createSeries(data, coverFile) {
     }
 
     const newManga = new Manga({
+        _id: seriesId,
         title,
         author,
         description,
