@@ -1,25 +1,14 @@
-// 1. Variable Declarations (Top Level to avoid TDZ)
+// 1. Variable Declarations
 let currentMode = 'upload';
 let isRunning = false;
 let socket = null;
 
-// 2. DOM Elements
-const term = document.getElementById('terminal');
-const select = document.getElementById('series-select');
-const actionBtn = document.getElementById('action-btn');
-const pageTitle = document.getElementById('page-title');
-
-// 3. Initialize Socket.IO safely
+// 2. Initialize Socket.IO safely
 try {
     if (typeof io !== 'undefined') {
         socket = io();
-    } else {
-        console.error('Socket.IO library not loaded!');
-        log('Error crítico: No se pudo cargar Socket.IO', 'error');
     }
-} catch (e) {
-    console.error('Error initializing socket:', e);
-}
+} catch (e) { console.error('Error socket:', e); }
 
 // --- AUTH PERSISTENCE LOGIC ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -27,72 +16,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (storedUser) {
         try {
             const user = JSON.parse(storedUser);
-            // Validate basic structure
-            if (user && user.username) {
-                showApp(user);
-            } else {
-                localStorage.removeItem('neomanga_user'); // Invalid data
-            }
-        } catch (e) {
-            localStorage.removeItem('neomanga_user');
-        }
+            if (user && user.username) showApp(user);
+        } catch (e) { localStorage.removeItem('neomanga_user'); }
     }
 });
 
 function showApp(user) {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-layout').style.display = 'flex';
-    document.getElementById('user-display').innerHTML = 
-        user.username + 
-        ' <button onclick="logout()" style="background:none; border:none; color:#f48771; cursor:pointer; font-size:0.8em; margin-left:10px;">(Salir)</button>';
-    loadConfig(); // Load current config
-    loadSeries(); // Load series immediately
+    document.getElementById('user-display').textContent = user.username;
+    loadConfig();
+    loadSeries();
 }
 
-// --- CONFIGURATION LOGIC ---
-async function loadConfig() {
-    try {
-        const res = await fetch('/api/config');
-        const data = await res.json();
-        document.getElementById('current-folder').textContent = data.contentDir || 'No definida';
-    } catch (err) {
-        console.error('Error cargando config:', err);
-    }
-}
-
-async function promptChangeFolder() {
-    const current = document.getElementById('current-folder').textContent;
-    const newPath = prompt("Ingresa la ruta completa de la carpeta donde están tus series:", current);
-    
-    if (newPath && newPath !== current) {
-        try {
-            const res = await fetch('/api/config/folder', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: newPath })
-            });
-            
-            const data = await res.json();
-            
-            if (res.ok) {
-                log('📁 Carpeta actualizada: ' + newPath, 'success');
-                document.getElementById('current-folder').textContent = newPath;
-                loadSeries(); // Recargar series automáticamente
-            } else {
-                alert('Error: ' + (data.error || 'No se pudo cambiar la carpeta'));
-            }
-        } catch (err) {
-            alert('Error de conexión al cambiar carpeta');
-        }
-    }
-}
-
-function logout() {
-    localStorage.removeItem('neomanga_user');
-    location.reload();
-}
-
-// Login Logic
 async function login() {
     const email = document.getElementById('email').value;
     const password = document.getElementById('password').value;
@@ -100,7 +36,7 @@ async function login() {
     const btn = document.querySelector('.login-btn');
 
     if (!email || !password) {
-        errorMsg.textContent = "Por favor completa todos los campos";
+        errorMsg.textContent = "Completa todos los campos";
         errorMsg.style.display = 'block';
         return;
     }
@@ -115,24 +51,16 @@ async function login() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
         });
-
         const data = await res.json();
-
         if (res.ok) {
-            // Success & Save to LocalStorage
-            localStorage.setItem('neomanga_user', JSON.stringify({
-                username: data.username,
-                roles: data.roles
-            }));
-            
+            localStorage.setItem('neomanga_user', JSON.stringify({ username: data.username, roles: data.roles }));
             showApp(data);
         } else {
-            // Error
-            errorMsg.textContent = data.error || "Error de autenticación";
+            errorMsg.textContent = data.error || "Error de acceso";
             errorMsg.style.display = 'block';
         }
     } catch (err) {
-        errorMsg.textContent = "Error de conexión con el servidor";
+        errorMsg.textContent = "Error de conexión";
         errorMsg.style.display = 'block';
     } finally {
         btn.disabled = false;
@@ -140,113 +68,237 @@ async function login() {
     }
 }
 
-// Load Series
-function loadSeries() {
-    // Visual feedback
-     select.innerHTML = '<option value="" disabled selected>Cargando series...</option>';
-     select.disabled = true;
-
-     // AbortController for fetch timeout (5 seconds)
-     const controller = new AbortController();
-     const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-     fetch('/api/series', { signal: controller.signal })
-         .then(res => {
-             clearTimeout(timeoutId);
-             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-             return res.json();
-         })
-        .then(data => {
-            select.innerHTML = '<option value="" disabled selected>Selecciona una serie...</option>';
-            select.innerHTML += '<option value="ALL">--- TODAS LAS SERIES ---</option>';
-            
-            if (!data || data.length === 0) {
-                select.innerHTML = '<option value="" disabled>No se encontraron series locales</option>';
-            } else {
-                data.forEach(s => {
-                    const value = s.id || s;
-                    const label = s.title || s;
-                    const option = document.createElement('option');
-                    option.value = value;
-                    option.textContent = label;
-                    select.appendChild(option);
-                });
-            }
-            select.disabled = false;
-        })
-        .catch(err => {
-            log('Error cargando series: ' + err.message, 'error');
-            select.innerHTML = '<option value="" disabled>Error de carga (Ver Terminal)</option>';
-            select.disabled = false;
-        });
+function logout() {
+    localStorage.removeItem('neomanga_user');
+    location.reload();
 }
 
-// Socket Events
-if (socket) {
-    socket.on('log', (data) => {
-        log(data.message, data.type);
-    });
+async function loadConfig() {
+    try {
+        const res = await fetch('/api/config');
+        const data = await res.json();
+        document.getElementById('current-folder').textContent = data.contentDir || 'No definida';
+    } catch (err) {}
+}
 
+async function loadSeries() {
+    const select = document.getElementById('series-select');
+    select.innerHTML = '<option value="" disabled selected>Cargando series...</option>';
+    try {
+        const res = await fetch('/api/series');
+        const data = await res.json();
+        select.innerHTML = '<option value="" disabled selected>Selecciona una serie...</option>';
+        select.innerHTML += '<option value="ALL">--- TODAS LAS SERIES ---</option>';
+        data.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.id;
+            opt.textContent = s.title;
+            select.appendChild(opt);
+        });
+    } catch (err) {
+        select.innerHTML = '<option value="" disabled>Error de carga</option>';
+    }
+}
+
+async function promptChangeFolder() {
+    const current = document.getElementById('current-folder').textContent;
+    const newPath = prompt("Ingresa la ruta completa de la carpeta:", current);
+    if (newPath && newPath !== current) {
+        try {
+            const res = await fetch('/api/config/folder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: newPath })
+            });
+            if (res.ok) {
+                document.getElementById('current-folder').textContent = newPath;
+                loadSeries();
+            }
+        } catch (err) { alert('Error al cambiar carpeta'); }
+    }
+}
+
+if (socket) {
+    socket.on('log', (data) => log(data.message, data.type));
     socket.on('status', (data) => {
         isRunning = data.running;
         document.getElementById('status-indicator').style.display = isRunning ? 'block' : 'none';
-        actionBtn.disabled = isRunning;
-        select.disabled = isRunning;
-        document.getElementById('change-folder-btn').disabled = isRunning;
+        document.getElementById('action-btn').disabled = isRunning;
     });
-
-    // Listen for input requests
-    socket.on('request-confirm', (data) => {
-        showConfirm(data.message);
-    });
-}
-
-function resetUI() {
-    if (isRunning) return alert('No puedes regresar mientras hay un proceso en ejecución.');
-    setMode('upload');
-    clearTerm();
-    select.value = "";
-    log('🏠 Regresado al inicio. Puedes seleccionar otra serie o cambiar la carpeta base.', 'info');
+    socket.on('request-confirm', (data) => showConfirm(data.message));
 }
 
 function setMode(mode) {
     currentMode = mode;
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-    // Handle the event correctly if called from HTML onclick
-    if (event && event.target) {
-        event.target.classList.add('active');
-    }
+    
+    // Fix: Use currentTarget to get the button even if an icon was clicked
+    const target = event.currentTarget;
+    if (target) target.classList.add('active');
 
-    if (mode === 'upload') {
-        pageTitle.textContent = 'Upload Manager';
-        actionBtn.textContent = 'Iniciar Upload';
-        actionBtn.style.backgroundColor = '#007acc';
-    } else if (mode === 'verify') {
-        pageTitle.textContent = 'Verificación de Integridad';
-        actionBtn.textContent = 'Iniciar Verificación';
-        actionBtn.style.backgroundColor = '#d7ba7d';
-        actionBtn.style.color = '#1e1e1e';
-    } else if (mode === 'repair') {
-        pageTitle.textContent = 'Reparación de Series';
-        actionBtn.textContent = 'Iniciar Reparación';
-        actionBtn.style.backgroundColor = '#ce9178';
-        actionBtn.style.color = '#fff';
+    const title = document.getElementById('page-title');
+    const btn = document.getElementById('action-btn');
+    const standardControls = document.getElementById('standard-controls');
+    const createSection = document.getElementById('create-series-section');
+
+    if (mode === 'create') {
+        title.textContent = 'Crear Nueva Serie';
+        standardControls.style.display = 'none';
+        createSection.style.display = 'flex';
+        loadGenres();
+    } else {
+        standardControls.style.display = 'flex';
+        createSection.style.display = 'none';
+        if (mode === 'upload') { title.textContent = 'Upload Manager'; btn.textContent = 'Iniciar Upload'; }
+        if (mode === 'verify') { title.textContent = 'Verificación'; btn.textContent = 'Iniciar Verificación'; }
+        if (mode === 'repair') { title.textContent = 'Reparación'; btn.textContent = 'Iniciar Reparación'; }
     }
+}
+
+function updateSlug() {
+    const title = document.getElementById('create-title').value;
+    const slug = title.toLowerCase()
+        .replace(/[^a-z0-9]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+    document.getElementById('create-slug').value = slug;
+}
+
+let selectedGenres = new Set();
+
+async function loadGenres() {
+    const container = document.getElementById('genres-container');
+    try {
+        const res = await fetch('/api/genres');
+        const genres = await res.json();
+        container.innerHTML = '';
+        if (genres.length === 0) {
+            container.innerHTML = '<span style="color: var(--text-muted); font-size: 0.8rem;">No hay géneros en la BD. Agrega uno abajo.</span>';
+        }
+        genres.forEach(genre => {
+            const span = document.createElement('span');
+            span.className = 'genre-pill';
+            span.textContent = genre;
+            span.onclick = () => toggleGenre(genre, span);
+            if (selectedGenres.has(genre)) span.classList.add('selected');
+            container.appendChild(span);
+        });
+    } catch (err) {
+        container.innerHTML = '<span style="color: var(--error-color);">Error cargando géneros</span>';
+    }
+}
+
+function toggleGenre(genre, element) {
+    if (selectedGenres.has(genre)) {
+        selectedGenres.delete(genre);
+        element.classList.remove('selected');
+    } else {
+        selectedGenres.add(genre);
+        element.classList.add('selected');
+    }
+}
+
+document.getElementById('new-genre')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        const val = e.target.value.trim();
+        if (val && !selectedGenres.has(val)) {
+            selectedGenres.add(val);
+            const container = document.getElementById('genres-container');
+            const span = document.createElement('span');
+            span.className = 'genre-pill selected';
+            span.textContent = val;
+            span.onclick = () => toggleGenre(val, span);
+            container.appendChild(span);
+            e.target.value = '';
+        }
+    }
+});
+
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    const display = document.getElementById('file-name-display');
+    if (file) {
+        display.textContent = '📄 Archivo seleccionado: ' + file.name;
+        display.style.display = 'block';
+        document.getElementById('create-cover-url').disabled = true;
+        document.getElementById('create-cover-url').style.opacity = '0.5';
+    }
+}
+
+async function submitCreateSeries() {
+    const title = document.getElementById('create-title').value;
+    const type = document.getElementById('create-type').value;
+    const status = document.getElementById('create-status').value;
+    const author = document.getElementById('create-author').value;
+    const year = document.getElementById('create-year').value;
+    const description = document.getElementById('create-description').value;
+    const coverUrl = document.getElementById('create-cover-url').value;
+    const coverFile = document.getElementById('create-cover-file').files[0];
+
+    if (!title) return alert('El título es obligatorio');
+
+    const btn = document.getElementById('create-btn');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Creando Serie...';
+
+    const formData = new FormData();
+    formData.append('title', title);
+    formData.append('type', type);
+    formData.append('status', status);
+    formData.append('author', author);
+    formData.append('releaseYear', year);
+    formData.append('description', description);
+    formData.append('coverUrl', coverUrl);
+    if (coverFile) formData.append('cover', coverFile);
+    
+    // Add genres
+    selectedGenres.forEach(g => formData.append('genres', g));
+
+    try {
+        const res = await fetch('/api/series', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+        if (res.ok) {
+            log('✅ Serie creada con éxito: ' + title, 'success');
+            resetCreateForm();
+            setMode('upload');
+            loadSeries();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (err) {
+        alert('Error de conexión');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+    }
+}
+
+function resetCreateForm() {
+    document.getElementById('create-title').value = '';
+    document.getElementById('create-slug').value = '';
+    document.getElementById('create-author').value = '';
+    document.getElementById('create-year').value = '';
+    document.getElementById('create-description').value = '';
+    document.getElementById('create-cover-url').value = '';
+    document.getElementById('create-cover-url').disabled = false;
+    document.getElementById('create-cover-url').style.opacity = '1';
+    document.getElementById('create-cover-file').value = '';
+    document.getElementById('file-name-display').style.display = 'none';
+    selectedGenres.clear();
+    loadGenres();
 }
 
 function runAction() {
-    if (!socket) return log('Error: No hay conexión Socket.IO', 'error');
-
-    const series = select.value;
+    const series = document.getElementById('series-select').value;
     if (!series) return alert('Selecciona una serie');
-    
-    clearTerm();
-    if (currentMode === 'upload') socket.emit('start-upload', { series });
-    if (currentMode === 'verify') socket.emit('start-verify', { series });
-    if (currentMode === 'repair') socket.emit('start-repair', { series });
+    document.getElementById('terminal').innerHTML = '';
+    socket.emit('start-' + currentMode, { series });
 }
 
-// --- CONFIRMATION MODAL LOGIC ---
 function showConfirm(msg) {
     document.getElementById('confirm-msg').textContent = msg;
     document.getElementById('confirm-modal').style.display = 'flex';
@@ -254,37 +306,24 @@ function showConfirm(msg) {
 
 function resolveConfirm(result) {
     document.getElementById('confirm-modal').style.display = 'none';
-    if (socket) {
-        socket.emit('resolve-confirm', { result });
-        
-        // Visual feedback in terminal
-        let text = '';
-        let type = 'info';
-        
-        if (result === true) { text = '✅ Confirmado (Solo este)'; type = 'success'; }
-        else if (result === false) { text = '❌ Cancelado (Solo este)'; type = 'error'; }
-        else if (result === 'yes_all') { text = '✅✅ Confirmado a TODO'; type = 'success'; }
-        else if (result === 'no_all') { text = '❌❌ Cancelado a TODO'; type = 'error'; }
-        
-        log(text, type);
-    }
+    socket.emit('resolve-confirm', { result });
 }
 
 function log(msg, type = 'info') {
+    const term = document.getElementById('terminal');
     const div = document.createElement('div');
     div.className = 'log-line log-' + type;
-    div.textContent = msg; // Text content escapes HTML
+    
+    // Add icon based on type
+    let icon = 'ℹ️';
+    if (type === 'success') icon = '✅';
+    if (type === 'error') icon = '❌';
+    if (type === 'warn') icon = '⚠️';
+    
+    div.innerHTML = `<span style="margin-right:10px; opacity:0.7">${icon}</span> <span>${msg}</span>`;
     term.appendChild(div);
     term.scrollTop = term.scrollHeight;
 }
 
-function clearTerm() {
-    term.innerHTML = '';
-}
-
-// Handle Enter key in password field
-document.getElementById('password').addEventListener('keypress', function (e) {
-    if (e.key === 'Enter') {
-        login();
-    }
-});
+function clearTerm() { document.getElementById('terminal').innerHTML = ''; }
+function resetUI() { location.reload(); }

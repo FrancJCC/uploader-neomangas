@@ -2,6 +2,7 @@ const Manga = require('../../models/Manga');
 const fs = require('fs-extra');
 const path = require('path');
 const env = require('../../config/env');
+const seriesService = require('../../services/series.service');
 
 exports.getSeries = async (req, res) => {
     try {
@@ -60,5 +61,23 @@ exports.getSeries = async (req, res) => {
     } catch (error) {
         console.error('[API] Error general:', error);
         res.status(500).json({ error: error.message });
+    }
+};
+
+exports.getGenres = async (req, res) => {
+    try {
+        const genres = await seriesService.getAllGenres();
+        res.json(genres);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.createSeries = async (req, res) => {
+    try {
+        const result = await seriesService.createSeries(req.body, req.file);
+        res.json({ success: true, manga: result });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
     }
 };

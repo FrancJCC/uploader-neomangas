@@ -1,9 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
+const multer = require('multer');
 const authController = require('../controllers/auth.controller');
 const configController = require('../controllers/config.controller');
 const seriesController = require('../controllers/series.controller');
+
+// Multer for temp storage during cover upload
+const upload = multer({ dest: 'temp/' });
 
 // View Route
 router.get('/', (req, res) => {
@@ -19,5 +23,7 @@ router.post('/api/config/folder', configController.updateFolder);
 
 // Series Routes
 router.get('/api/series', seriesController.getSeries);
+router.get('/api/genres', seriesController.getGenres);
+router.post('/api/series', upload.single('cover'), seriesController.createSeries);
 
 module.exports = router;

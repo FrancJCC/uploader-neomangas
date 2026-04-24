@@ -151,9 +151,158 @@ function setMode(mode) {
 
     const title = document.getElementById('page-title');
     const btn = document.getElementById('action-btn');
-    if (mode === 'upload') { title.textContent = 'Upload Manager'; btn.textContent = 'Iniciar Upload'; }
-    if (mode === 'verify') { title.textContent = 'Verificación'; btn.textContent = 'Iniciar Verificación'; }
-    if (mode === 'repair') { title.textContent = 'Reparación'; btn.textContent = 'Iniciar Reparación'; }
+    const standardControls = document.getElementById('standard-controls');
+    const createSection = document.getElementById('create-series-section');
+
+    if (mode === 'create') {
+        title.textContent = 'Crear Nueva Serie';
+        standardControls.style.display = 'none';
+        createSection.style.display = 'flex';
+        loadGenres();
+    } else {
+        standardControls.style.display = 'flex';
+        createSection.style.display = 'none';
+        if (mode === 'upload') { title.textContent = 'Upload Manager'; btn.textContent = 'Iniciar Upload'; }
+        if (mode === 'verify') { title.textContent = 'Verificación'; btn.textContent = 'Iniciar Verificación'; }
+        if (mode === 'repair') { title.textContent = 'Reparación'; btn.textContent = 'Iniciar Reparación'; }
+    }
+}
+
+function updateSlug() {
+    const title = document.getElementById('create-title').value;
+    const slug = title.toLowerCase()
+        .replace(/[^a-z0-9]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+    document.getElementById('create-slug').value = slug;
+}
+
+let selectedGenres = new Set();
+
+async function loadGenres() {
+    const container = document.getElementById('genres-container');
+    try {
+        const res = await fetch('/api/genres');
+        const genres = await res.json();
+        container.innerHTML = '';
+        if (genres.length === 0) {
+            container.innerHTML = '<span style="color: var(--text-muted); font-size: 0.8rem;">No hay géneros en la BD. Agrega uno abajo.</span>';
+        }
+        genres.forEach(genre => {
+            const span = document.createElement('span');
+            span.className = 'genre-pill';
+            span.textContent = genre;
+            span.onclick = () => toggleGenre(genre, span);
+            if (selectedGenres.has(genre)) span.classList.add('selected');
+            container.appendChild(span);
+        });
+    } catch (err) {
+        container.innerHTML = '<span style="color: var(--error-color);">Error cargando géneros</span>';
+    }
+}
+
+function toggleGenre(genre, element) {
+    if (selectedGenres.has(genre)) {
+        selectedGenres.delete(genre);
+        element.classList.remove('selected');
+    } else {
+        selectedGenres.add(genre);
+        element.classList.add('selected');
+    }
+}
+
+document.getElementById('new-genre')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        const val = e.target.value.trim();
+        if (val && !selectedGenres.has(val)) {
+            selectedGenres.add(val);
+            const container = document.getElementById('genres-container');
+            const span = document.createElement('span');
+            span.className = 'genre-pill selected';
+            span.textContent = val;
+            span.onclick = () => toggleGenre(val, span);
+            container.appendChild(span);
+            e.target.value = '';
+        }
+    }
+});
+
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    const display = document.getElementById('file-name-display');
+    if (file) {
+        display.textContent = '📄 Archivo seleccionado: ' + file.name;
+        display.style.display = 'block';
+        document.getElementById('create-cover-url').disabled = true;
+        document.getElementById('create-cover-url').style.opacity = '0.5';
+    }
+}
+
+async function submitCreateSeries() {
+    const title = document.getElementById('create-title').value;
+    const type = document.getElementById('create-type').value;
+    const status = document.getElementById('create-status').value;
+    const author = document.getElementById('create-author').value;
+    const year = document.getElementById('create-year').value;
+    const description = document.getElementById('create-description').value;
+    const coverUrl = document.getElementById('create-cover-url').value;
+    const coverFile = document.getElementById('create-cover-file').files[0];
+
+    if (!title) return alert('El título es obligatorio');
+
+    const btn = document.getElementById('create-btn');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Creando Serie...';
+
+    const formData = new FormData();
+    formData.append('title', title);
+    formData.append('type', type);
+    formData.append('status', status);
+    formData.append('author', author);
+    formData.append('releaseYear', year);
+    formData.append('description', description);
+    formData.append('coverUrl', coverUrl);
+    if (coverFile) formData.append('cover', coverFile);
+    
+    // Add genres
+    selectedGenres.forEach(g => formData.append('genres', g));
+
+    try {
+        const res = await fetch('/api/series', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+        if (res.ok) {
+            log('✅ Serie creada con éxito: ' + title, 'success');
+            resetCreateForm();
+            setMode('upload');
+            loadSeries();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (err) {
+        alert('Error de conexión');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+    }
+}
+
+function resetCreateForm() {
+    document.getElementById('create-title').value = '';
+    document.getElementById('create-slug').value = '';
+    document.getElementById('create-author').value = '';
+    document.getElementById('create-year').value = '';
+    document.getElementById('create-description').value = '';
+    document.getElementById('create-cover-url').value = '';
+    document.getElementById('create-cover-url').disabled = false;
+    document.getElementById('create-cover-url').style.opacity = '1';
+    document.getElementById('create-cover-file').value = '';
+    document.getElementById('file-name-display').style.display = 'none';
+    selectedGenres.clear();
+    loadGenres();
 }
 
 function runAction() {
@@ -637,6 +786,20 @@ select:focus {
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
+.genre-pill {
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+}
+.genre-pill:hover { background: rgba(255, 255, 255, 0.1); border-color: var(--accent-color); }
+.genre-pill.selected { background: var(--accent-color); color: #fff; border-color: transparent; box-shadow: 0 0 10px var(--accent-glow); }
+
+.form-group { display: flex; flex-direction: column; gap: 8px; }
 `;
 
 const app = express();

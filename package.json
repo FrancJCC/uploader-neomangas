@@ -1,6 +1,6 @@
 {
   "name": "neomanga-tools",
-  "version": "2.3.5",
+  "version": "2.3.6",
   "description": "NeoManga Admin CLI - Upload, Verify, Repair",
   "main": "index.js",
   "bin": "index.js",
@@ -25,6 +25,7 @@
     "fs-extra": "^11.3.3",
     "inquirer": "^8.2.7",
     "mongoose": "^8.0.0",
+    "multer": "^2.1.1",
     "open": "^8.4.2",
     "ora": "^5.4.1",
     "sharp": "^0.32.6",
