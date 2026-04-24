@@ -81,3 +81,32 @@ exports.createSeries = async (req, res) => {
         res.status(400).json({ error: error.message });
     }
 };
+
+exports.listDbSeries = async (req, res) => {
+    try {
+        const series = await seriesService.listAllSeries();
+        res.json(series);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.getSeriesDetails = async (req, res) => {
+    try {
+        const series = await seriesService.getSeriesById(req.params.id);
+        if (!series) return res.status(404).json({ error: 'Serie no encontrada' });
+        res.json(series);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.updateSeries = async (req, res) => {
+    try {
+        const result = await seriesService.updateSeries(req.params.id, req.body, req.file);
+        res.json({ success: true, manga: result });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+};
+

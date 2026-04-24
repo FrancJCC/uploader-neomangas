@@ -53,6 +53,9 @@
                 <button class="nav-btn" onclick="setMode('create')">
                     <span style="font-size: 1.4rem;">➕</span> Crear Serie
                 </button>
+                <button class="nav-btn" onclick="setMode('list')">
+                    <span style="font-size: 1.4rem;">📋</span> Listado Series
+                </button>
             </nav>
             
             <div class="config-section">
@@ -167,6 +170,91 @@
                     <button class="btn-secondary" onclick="resetCreateForm()" style="flex: 1;">Cancelar</button>
                 </div>
             </div>
+
+            <!-- SERIES LIST SECTION -->
+            <div id="series-list-section" class="controls-card" style="display: none; flex-direction: column; gap: 20px; align-items: stretch; max-height: 80vh;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3 style="margin: 0; color: var(--accent-color); font-size: 1.2rem;">Listado de Series en BD</h3>
+                    <input type="text" id="series-search" class="login-input" placeholder="🔍 Buscar por título..." style="width: 250px; margin-bottom: 0; padding: 10px 16px;">
+                </div>
+                
+                <div id="series-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; overflow-y: auto; padding-right: 10px;">
+                    <!-- Series items will be loaded here -->
+                </div>
+            </div>
+
+            <!-- EDIT SERIES FORM (Reuse styles from Create) -->
+            <div id="edit-series-section" class="controls-card" style="display: none; flex-direction: column; gap: 24px; align-items: stretch;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3 style="margin: 0; color: var(--warning-color); font-size: 1.2rem;">Editar Serie</h3>
+                    <button class="btn-secondary" onclick="setMode('list')" style="padding: 8px 16px;">⬅️ Volver al listado</button>
+                </div>
+
+                <input type="hidden" id="edit-id">
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div class="form-group">
+                        <label class="config-label">Título de la Serie</label>
+                        <input type="text" id="edit-title" class="login-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="config-label">ID / FolderPath (No editable)</label>
+                        <input type="text" id="edit-slug" class="login-input" disabled style="opacity: 0.6;">
+                    </div>
+                    <div class="form-group">
+                        <label class="config-label">Tipo de Serie</label>
+                        <select id="edit-type" style="width: 100%;">
+                            <option value="Manga">Manga</option>
+                            <option value="Manhwa">Manhwa</option>
+                            <option value="Manhua">Manhua</option>
+                            <option value="Novel">Novela</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="config-label">Estado</label>
+                        <select id="edit-status" style="width: 100%;">
+                            <option value="Ongoing">Publicándose</option>
+                            <option value="Completed">Finalizado</option>
+                            <option value="Hiatus">En Pausa</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="config-label">Autor</label>
+                        <input type="text" id="edit-author" class="login-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="config-label">Año de Lanzamiento</label>
+                        <input type="number" id="edit-year" class="login-input">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="config-label">Géneros</label>
+                    <div id="edit-genres-container" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; max-height: 120px; overflow-y: auto; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 12px;"></div>
+                    <input type="text" id="edit-new-genre" class="login-input" placeholder="Agregar nuevo género (Enter)" style="margin-bottom: 0;">
+                </div>
+
+                <div class="form-group">
+                    <label class="config-label">Descripción</label>
+                    <textarea id="edit-description" class="login-input" style="height: 100px; resize: none; font-family: inherit;"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="config-label">Portada (URL o Archivo)</label>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <img id="edit-cover-preview" src="" style="width: 60px; height: 80px; object-fit: cover; border-radius: 8px; display: none; border: 1px solid var(--border-color);">
+                        <input type="text" id="edit-cover-url" class="login-input" placeholder="https://..." style="flex: 1; margin-bottom: 0;">
+                        <label for="edit-cover-file" class="btn-secondary" style="cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                            📁 Cambiar
+                            <input type="file" id="edit-cover-file" style="display: none;" accept="image/*" onchange="handleEditFileSelect(event)">
+                        </label>
+                    </div>
+                    <div id="edit-file-name" style="font-size: 0.8rem; color: var(--success-color); margin-top: 8px; display: none;"></div>
+                </div>
+
+                <button id="update-btn" onclick="submitUpdateSeries()" style="padding: 16px; background: var(--accent-gradient); border: none; border-radius: 16px; color: #fff; font-weight: 800; cursor: pointer; font-size: 1rem; box-shadow: 0 4px 12px var(--accent-glow);">Guardar Cambios</button>
+            </div>
+
 
             <div class="terminal-container">
                 <div class="terminal-header">

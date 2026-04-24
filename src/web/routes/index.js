@@ -25,5 +25,8 @@ router.post('/api/config/folder', configController.updateFolder);
 router.get('/api/series', seriesController.getSeries);
 router.get('/api/genres', seriesController.getGenres);
 router.post('/api/series', upload.single('cover'), seriesController.createSeries);
+router.get('/api/db-series', seriesController.listDbSeries);
+router.get('/api/series/:id', seriesController.getSeriesDetails);
+router.put('/api/series/:id', upload.single('cover'), seriesController.updateSeries);
 
 module.exports = router;

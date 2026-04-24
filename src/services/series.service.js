@@ -96,7 +96,62 @@ async function getAllGenres() {
     return await Manga.distinct('genres');
 }
 
+/**
+ * Gets all series from the database with basic info.
+ */
+async function listAllSeries() {
+    return await Manga.find({}, 'title folderPath status type coverUrl').sort({ title: 1 }).lean();
+}
+
+/**
+ * Gets full details of a single series by ID.
+ */
+async function getSeriesById(id) {
+    return await Manga.findById(id).lean();
+}
+
+/**
+ * Updates an existing series.
+ */
+async function updateSeries(id, data, coverFile) {
+    const { 
+        title, 
+        author, 
+        description, 
+        status, 
+        releaseYear, 
+        type, 
+        genres, 
+        coverUrl: providedCoverUrl 
+    } = data;
+
+    const manga = await Manga.findById(id);
+    if (!manga) throw new Error('Serie no encontrada');
+
+    let coverUrl = providedCoverUrl;
+    if (coverFile) {
+        coverUrl = await uploadCover(manga.folderPath, coverFile);
+    }
+
+    const updateData = {
+        title,
+        author,
+        description,
+        status,
+        releaseYear: parseInt(releaseYear),
+        type,
+        genres: Array.isArray(genres) ? genres : (genres ? genres.split(',').map(g => g.trim()) : [])
+    };
+
+    if (coverUrl) updateData.coverUrl = coverUrl;
+
+    return await Manga.findByIdAndUpdate(id, updateData, { new: true });
+}
+
 module.exports = {
     createSeries,
-    getAllGenres
+    getAllGenres,
+    listAllSeries,
+    getSeriesById,
+    updateSeries
 };
