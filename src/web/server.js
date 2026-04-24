@@ -36,15 +36,15 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-function showApp(user) {
+window.showApp = function(user) {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-layout').style.display = 'flex';
     document.getElementById('user-display').textContent = user.username;
     loadConfig();
     loadSeries();
-}
+};
 
-async function login() {
+window.login = async function() {
     var email = document.getElementById('email').value;
     var password = document.getElementById('password').value;
     var errorMsg = document.getElementById('login-error');
@@ -81,22 +81,22 @@ async function login() {
         btn.disabled = false;
         btn.textContent = "Entrar";
     }
-}
+};
 
-function logout() {
+window.logout = function() {
     localStorage.removeItem('neomanga_user');
     location.reload();
-}
+};
 
-async function loadConfig() {
+window.loadConfig = async function() {
     try {
         var res = await fetch('/api/config');
         var data = await res.json();
         document.getElementById('current-folder').textContent = data.contentDir || 'No definida';
     } catch (err) {}
-}
+};
 
-async function loadSeries() {
+window.loadSeries = async function() {
     var select = document.getElementById('series-select');
     if (!select) return;
     select.innerHTML = '<option value="" disabled selected>Cargando series...</option>';
@@ -114,9 +114,9 @@ async function loadSeries() {
     } catch (err) {
         select.innerHTML = '<option value="" disabled>Error de carga</option>';
     }
-}
+};
 
-async function promptChangeFolder() {
+window.promptChangeFolder = async function() {
     var current = document.getElementById('current-folder').textContent;
     var newPath = prompt("Ingresa la ruta completa de la carpeta:", current);
     if (newPath && newPath !== current) {
@@ -132,7 +132,7 @@ async function promptChangeFolder() {
             }
         } catch (err) { alert('Error al cambiar carpeta'); }
     }
-}
+};
 
 if (socket) {
     socket.on('log', function(data) { log(data.message, data.type); });
@@ -146,7 +146,7 @@ if (socket) {
     socket.on('request-confirm', function(data) { showConfirm(data.message); });
 }
 
-function setMode(mode, event) {
+window.setMode = function(mode, event) {
     currentMode = mode;
     document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
     
@@ -183,9 +183,9 @@ function setMode(mode, event) {
         if (mode === 'verify') { if (title) title.textContent = 'Verificación'; if (btn) btn.textContent = 'Iniciar Verificación'; }
         if (mode === 'repair') { if (title) title.textContent = 'Reparación'; if (btn) btn.textContent = 'Iniciar Reparación'; }
     }
-}
+};
 
-async function loadDbSeries() {
+window.loadDbSeries = async function() {
     var grid = document.getElementById('series-grid');
     if (!grid) return;
     grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px;">Cargando catálogo...</div>';
@@ -197,7 +197,7 @@ async function loadDbSeries() {
     } catch (err) {
         grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--error-color);">Error al cargar series</div>';
     }
-}
+};
 
 function renderSeriesGrid(series) {
     var grid = document.getElementById('series-grid');
@@ -212,15 +212,16 @@ function renderSeriesGrid(series) {
     series.forEach(function(s) {
         var card = document.createElement('div');
         card.className = 'series-card';
-        card.innerHTML = '\
-            <img src="' + (s.coverUrl || '/public/logo-header.png') + '" alt="' + s.title + '" onerror="this.src=\'/public/logo-header.png\'">\
-            <div class="series-card-content">\
-                <div class="series-card-title">' + s.title + '</div>\
-                <div class="series-card-meta">' + s.type + ' • ' + s.status + '</div>\
-                <div class="series-card-id">' + s.folderPath + '</div>\
-                <button class="btn-small" style="margin-top: 10px; background: var(--accent-color);" onclick="openEditSeries(\'' + s._id + '\')">✏️ Editar Serie</button>\
-            </div>\
-        ';
+        var cover = s.coverUrl || '/public/logo-header.png';
+        var html = '';
+        html += '<img src="' + cover + '" alt="' + s.title + '" onerror="this.src=\'/public/logo-header.png\'">';
+        html += '<div class="series-card-content">';
+        html += '<div class="series-card-title">' + s.title + '</div>';
+        html += '<div class="series-card-meta">' + s.type + ' • ' + s.status + '</div>';
+        html += '<div class="series-card-id">' + s.folderPath + '</div>';
+        html += '<button class="btn-small" style="margin-top: 10px; background: var(--accent-color);" onclick="openEditSeries(\'' + s._id + '\')">✏️ Editar Serie</button>';
+        html += '</div>';
+        card.innerHTML = html;
         grid.appendChild(card);
     });
 }
@@ -234,7 +235,7 @@ if (searchInput) {
     });
 }
 
-async function openEditSeries(id) {
+window.openEditSeries = async function(id) {
     try {
         var response = await fetch('/api/series/' + id);
         var s = await response.json();
@@ -263,9 +264,9 @@ async function openEditSeries(id) {
     } catch (err) {
         alert('Error al cargar detalles de la serie');
     }
-}
+};
 
-async function loadEditGenres() {
+window.loadEditGenres = async function() {
     var container = document.getElementById('edit-genres-container');
     if (!container) return;
     try {
@@ -285,7 +286,7 @@ async function loadEditGenres() {
             container.appendChild(span);
         });
     } catch (err) {}
-}
+};
 
 function handleEditFileSelect(event) {
     var file = event.target.files[0];
@@ -298,7 +299,7 @@ function handleEditFileSelect(event) {
     }
 }
 
-async function submitUpdateSeries() {
+window.submitUpdateSeries = async function() {
     var id = document.getElementById('edit-id').value;
     var title = document.getElementById('edit-title').value;
     var type = document.getElementById('edit-type').value;
@@ -351,9 +352,9 @@ async function submitUpdateSeries() {
         btn.disabled = false;
         btn.textContent = originalText;
     }
-}
+};
 
-function generateNewId() {
+window.generateNewId = function() {
     var timestamp = Math.floor(Date.now() / 1000).toString(16);
     var random = 'xxxxxxxxxxxxxxxx'.replace(/[x]/g, function() {
         return (Math.random() * 16 | 0).toString(16);
@@ -362,9 +363,9 @@ function generateNewId() {
     var input = document.getElementById('create-slug');
     if (input) input.value = newId;
     return newId;
-}
+};
 
-async function loadGenres() {
+window.loadGenres = async function() {
     var container = document.getElementById('genres-container');
     if (!container) return;
     try {
@@ -380,7 +381,7 @@ async function loadGenres() {
             container.appendChild(span);
         });
     } catch (err) {}
-}
+};
 
 function toggleGenre(genre, element) {
     if (selectedGenres.has(genre)) {
@@ -441,7 +442,7 @@ function handleFileSelect(event) {
     }
 }
 
-async function submitCreateSeries() {
+window.submitCreateSeries = async function() {
     var title = document.getElementById('create-title').value;
     var type = document.getElementById('create-type').value;
     var status = document.getElementById('create-status').value;
@@ -495,9 +496,9 @@ async function submitCreateSeries() {
         btn.disabled = false;
         btn.textContent = originalText;
     }
-}
+};
 
-function resetCreateForm() {
+window.resetCreateForm = function() {
     document.getElementById('create-title').value = '';
     generateNewId();
     document.getElementById('create-author').value = '';
@@ -510,26 +511,26 @@ function resetCreateForm() {
     document.getElementById('file-name-display').style.display = 'none';
     selectedGenres.clear();
     loadGenres();
-}
+};
 
-function runAction() {
+window.runAction = function() {
     var series = document.getElementById('series-select').value;
     if (!series) return alert('Selecciona una serie');
     document.getElementById('terminal').innerHTML = '';
     socket.emit('start-' + currentMode, { series: series });
-}
+};
 
-function showConfirm(msg) {
+window.showConfirm = function(msg) {
     document.getElementById('confirm-msg').textContent = msg;
     document.getElementById('confirm-modal').style.display = 'flex';
-}
+};
 
-function resolveConfirm(result) {
+window.resolveConfirm = function(result) {
     document.getElementById('confirm-modal').style.display = 'none';
     socket.emit('resolve-confirm', { result: result });
-}
+};
 
-function log(msg, type) {
+window.log = function(msg, type) {
     var term = document.getElementById('terminal');
     if (!term) return;
     var div = document.createElement('div');
@@ -538,10 +539,10 @@ function log(msg, type) {
     div.innerHTML = '<span style="margin-right:10px; opacity:0.7">' + icon + '</span> <span>' + msg + '</span>';
     term.appendChild(div);
     term.scrollTop = term.scrollHeight;
-}
+};
 
-function clearTerm() { var term = document.getElementById('terminal'); if (term) term.innerHTML = ''; }
-function resetUI() { location.reload(); }
+window.clearTerm = function() { var term = document.getElementById('terminal'); if (term) term.innerHTML = ''; };
+window.resetUI = function() { location.reload(); };
 `;
 
 // INLINED CSS (Fallback for PKG path issues)

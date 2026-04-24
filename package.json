@@ -1,7 +1,7 @@
 {
   "name": "neomanga-tools",
-  "version": "2.3.9",
-  "description": "NeoManga Admin CLI - Upload, Verify, Repair",
+  "version": "2.4.0",
+  "description": "NeoManga Admin CLI - Upload , Verify, Repair",
   "main": "index.js",
   "bin": "index.js",
   "scripts": {
